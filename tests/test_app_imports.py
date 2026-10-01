@@ -8,6 +8,8 @@ def test_app_and_src_imports():
         "src.pdf_processor",
         "src.llm_client",
         "src.ui",
+        "src.desktop_launcher",
+        "main",
         "app"
     ]
     for mod in modules:

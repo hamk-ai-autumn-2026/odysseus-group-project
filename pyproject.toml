@@ -1,12 +1,28 @@
 [project]
-name = "pdf-analyzer"
+name = "documind-ai"
 version = "0.1.0"
-description = "Add your description here"
+description = "A fully local, privacy-first PDF document analyzer, summarizer, and interactive Q&A assistant."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "openai>=3.22.1",
     "pypdf>=6.19.0",
+    "pyside6>=6.11.2",
     "pytest>=9.1.1",
+    "pywebview>=6.2.1",
+    "qtpy>=2.4.3",
     "streamlit>=1.64.0",
 ]
+
+[project.scripts]
+documind = "src.desktop_launcher:launch_standalone_app"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.uv]
+package = true

@@ -15,6 +15,12 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Build & Package Metadata
+*.egg-info/
+*.egg
+build/
+dist/
+
 # Streamlit Local Cache & Config
 .streamlit/secrets.toml
 
@@ -37,5 +43,4 @@ scratch/
 tmp/
 
 # Other
-
 Docs/
