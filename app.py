@@ -15,7 +15,8 @@ from src.ui import (
     inject_custom_css,
     render_hero_header,
     render_metric_cards,
-    render_lm_studio_setup_guide
+    render_lm_studio_setup_guide,
+    trigger_browser_notification
 )
 
 st.set_page_config(
@@ -39,6 +40,8 @@ if "summary_output" not in st.session_state:
     st.session_state.summary_output = ""
 if "current_preset" not in st.session_state:
     st.session_state.current_preset = "Executive Summary"
+if "stop_requested" not in st.session_state:
+    st.session_state.stop_requested = False
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -89,6 +92,15 @@ with st.sidebar:
     temperature = st.slider("Temperature (Creativity)", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
     max_chunk_chars = st.slider("Chunk Size (Characters)", min_value=1500, max_value=8000, value=3500, step=500, help="Controls size of text chunks for large PDFs")
     enable_map_reduce = st.checkbox("Enable Map-Reduce for Large PDFs", value=True, help="Splits large PDFs into chunks and synthesizes them")
+    enable_notifications = st.checkbox("🔔 Desktop Notifications when ready", value=True, help="Triggers system desktop notification when analysis finishes")
+    if enable_notifications:
+        test_notif_btn = st.button("🧪 Test Desktop Notification", use_container_width=True)
+        if test_notif_btn:
+            trigger_browser_notification(
+                title="DocuMind AI Test 🔔",
+                body="Desktop notifications are enabled and working correctly!"
+            )
+            st.toast("Sent test notification to browser!")
 
     st.markdown("---")
     st.markdown(
@@ -115,6 +127,7 @@ if uploaded_file is not None:
             st.session_state.file_name = uploaded_file.name
             st.session_state.chat_history = []
             st.session_state.summary_output = ""
+            st.session_state.stop_requested = False
 
 pdf_data = st.session_state.pdf_data
 
@@ -179,7 +192,13 @@ if pdf_data:
                     placeholder="e.g., Focus specifically on section 3..."
                 )
                 
-            start_analysis = st.button("🚀 Run Local AI Analysis", type="primary", use_container_width=True)
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                start_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
+            with btn_col2:
+                stop_analysis = st.button("⏹️ Stop Analysis", type="secondary", use_container_width=True)
+                if stop_analysis:
+                    st.session_state.stop_requested = True
             
         with sum_col2:
             st.markdown("#### 📝 Analysis Report Output")
@@ -187,6 +206,7 @@ if pdf_data:
             output_container = st.empty()
             
             if start_analysis:
+                st.session_state.stop_requested = False
                 if not is_connected:
                     st.error("❌ Cannot run analysis: LM Studio local server is offline or unreachable. Please check LM Studio in sidebar.")
                 else:
@@ -210,11 +230,15 @@ if pdf_data:
                                 preset_name=preset_choice,
                                 custom_instruction=custom_instruction,
                                 temperature=temperature,
-                                status_callback=update_status
+                                status_callback=update_status,
+                                check_stop=lambda: st.session_state.get("stop_requested", False)
                             )
                             
                             full_response = output_container.write_stream(generator)
-                            status_box.update(label="✅ Analysis Complete!", state="complete", expanded=False)
+                            if st.session_state.stop_requested:
+                                status_box.update(label="⏹️ Analysis Stopped", state="error", expanded=False)
+                            else:
+                                status_box.update(label="✅ Analysis Complete!", state="complete", expanded=False)
                             st.session_state.summary_output = full_response
                         else:
                             with st.spinner("Generating local AI analysis..."):
@@ -224,16 +248,24 @@ if pdf_data:
                                     document_text=full_text,
                                     preset_name=preset_choice,
                                     custom_instruction=custom_instruction,
-                                    temperature=temperature
+                                    temperature=temperature,
+                                    check_stop=lambda: st.session_state.get("stop_requested", False)
                                 )
                                 full_response = output_container.write_stream(generator)
                                 st.session_state.summary_output = full_response
+                                
+                        # Fire desktop tray notification if enabled and completed cleanly
+                        if enable_notifications and not st.session_state.stop_requested and st.session_state.summary_output:
+                            trigger_browser_notification(
+                                title="DocuMind AI: Analysis Ready! 📄",
+                                body=f"The {preset_choice} for {st.session_state.file_name} has completed."
+                            )
                     except Exception as e:
                         st.error(f"⚠️ Error during LLM generation: {str(e)}")
             elif st.session_state.summary_output:
                 output_container.markdown(st.session_state.summary_output)
             else:
-                output_container.info("Select an analysis preset on the left and click **Run Local AI Analysis** to generate insights.")
+                output_container.info("Select an analysis preset on the left and click **Run Analysis** to generate insights.")
                 
             # Export Options
             if st.session_state.summary_output:

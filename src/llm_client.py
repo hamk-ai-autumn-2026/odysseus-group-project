@@ -63,10 +63,11 @@ def generate_streaming_response(
     model: str,
     system_prompt: str,
     user_content: str,
-    temperature: float = 0.3
+    temperature: float = 0.3,
+    check_stop: Optional[Any] = None
 ) -> Generator[str, None, None]:
     """
-    Streams response text tokens from LM Studio with error handling.
+    Streams response text tokens from LM Studio with error handling and stop support.
     """
     try:
         response = client.chat.completions.create(
@@ -80,6 +81,9 @@ def generate_streaming_response(
         )
         
         for chunk in response:
+            if check_stop and check_stop():
+                yield "\n\n⏹️ **Analysis stopped by user.**"
+                break
             if chunk.choices and len(chunk.choices) > 0:
                 delta = chunk.choices[0].delta
                 if delta and delta.content:
@@ -104,7 +108,8 @@ def run_single_pass_summary(
     preset_name: str,
     custom_instruction: Optional[str] = None,
     temperature: float = 0.3,
-    max_context_chars: int = 12000
+    max_context_chars: int = 12000,
+    check_stop: Optional[Any] = None
 ) -> Generator[str, None, None]:
     """
     Generates document summary in a single pass for smaller documents.
@@ -122,7 +127,7 @@ def run_single_pass_summary(
         
     user_content = f"Here is the document text:\n\n{safe_text}\n\nPlease analyze according to instructions."
     
-    return generate_streaming_response(client, model, system_prompt, user_content, temperature)
+    return generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
 
 def map_reduce_summary(
     client: OpenAI,
@@ -131,7 +136,8 @@ def map_reduce_summary(
     preset_name: str,
     custom_instruction: Optional[str] = None,
     temperature: float = 0.3,
-    status_callback=None
+    status_callback=None,
+    check_stop: Optional[Any] = None
 ) -> Generator[str, None, None]:
     """
     Performs Map-Reduce summarization for multi-chunk large PDFs.
@@ -143,6 +149,10 @@ def map_reduce_summary(
     
     # Map Phase
     for idx, chunk in enumerate(chunks):
+        if check_stop and check_stop():
+            chunk_summaries.append(f"### Excerpt ({chunk['page_range']}):\n(Analysis stopped by user)")
+            break
+            
         if status_callback:
             status_callback(f"Processing chunk {idx + 1}/{total_chunks} ({chunk['page_range']})...")
             
@@ -167,6 +177,10 @@ def map_reduce_summary(
         except Exception as e:
             chunk_summaries.append(f"### Excerpt ({chunk['page_range']}):\n(Extraction skipped due to error: {e})")
 
+    if check_stop and check_stop():
+        yield "⏹️ **Map phase stopped by user.**"
+        return
+
     if status_callback:
         status_callback("Synthesizing final document summary...")
 
@@ -185,7 +199,7 @@ def map_reduce_summary(
         f"{combined_map_text}"
     )
     
-    return generate_streaming_response(client, model, system_prompt, user_content, temperature)
+    return generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
 
 def chat_stream_response(
     client: OpenAI,

@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
 def inject_custom_css():
     """
@@ -271,3 +272,74 @@ def render_lm_studio_setup_guide(base_url: str):
            - Enter server URL in the sidebar settings on the left and hit **Test Connection**.
         """
     )
+
+import time
+
+def trigger_browser_notification(title: str, body: str):
+    """
+    Fires a multi-layer notification:
+    1. Web Audio API chime sound (works in all browsers without external files)
+    2. Updates browser tab title ("🔔 Analysis Complete!")
+    3. Native HTML5 desktop tray notification
+    """
+    safe_title = title.replace('"', '\\"').replace('\n', ' ')
+    safe_body = body.replace('"', '\\"').replace('\n', ' ')
+    ts = int(time.time() * 1000)
+    
+    js_code = f"""
+    <script>
+    (function() {{
+        var title = "{safe_title}";
+        var body = "{safe_body}";
+        var ts = {ts};
+
+        // 1. Play Web Audio API Chime Sound
+        try {{
+            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            var osc = audioCtx.createOscillator();
+            var gain = audioCtx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.12); // A5
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.35);
+        }} catch(e) {{}}
+
+        // 2. Flash Parent Browser Tab Title
+        try {{
+            if (window.parent && window.parent.document) {{
+                window.parent.document.title = "🔔 Analysis Complete! - DocuMind AI";
+                setTimeout(function() {{
+                    window.parent.document.title = "DocuMind Local AI - PDF Analyzer";
+                }}, 6000);
+            }}
+        }} catch(e) {{}}
+
+        // 3. Desktop Tray Notification with unique tag
+        if ("Notification" in window) {{
+            var options = {{
+                body: body,
+                tag: "documind_notif_" + ts,
+                requireInteraction: false
+            }};
+            if (Notification.permission === "granted") {{
+                new Notification(title, options);
+            }} else if (Notification.permission !== "denied") {{
+                Notification.requestPermission().then(function (permission) {{
+                    if (permission === "granted") {{
+                        new Notification(title, options);
+                    }}
+                }});
+            }}
+        }}
+    }})();
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+
+
