@@ -94,20 +94,45 @@ Open your browser at `http://localhost:8501`.
 
 ---
 
+## 🧪 Running Tests & Sanity Checks
+
+Run the automated test runner script to verify environment setup, pytest test suite, and module syntax:
+
+```bash
+./scripts/run_checks.sh
+```
+
+Or run pytest directly with UV:
+
+```bash
+uv run pytest
+```
+
+---
+
 ## 📂 Project Structure
 
 ```
 odysseus-group-project/
 ├── app.py                 # Main Streamlit application entry point
+├── main.py                # Default script entry point
 ├── pyproject.toml         # UV project configuration and dependencies
 ├── uv.lock                # UV lockfile
 ├── .env.example           # Environment configuration template
 ├── README.md              # Project documentation
-└── src/
-    ├── __init__.py        # Package initialization
-    ├── pdf_processor.py   # PyPDF extraction, page analysis, and chunking
-    ├── llm_client.py      # LM Studio OpenAI API client & map-reduce engine
-    └── ui.py              # Custom CSS styling, hero banner, and UI components
+├── Docs/                  # Sample PDF documents and output reports
+├── scripts/
+│   └── run_checks.sh      # Sanity check & test execution script
+├── src/
+│   ├── __init__.py        # Package initialization
+│   ├── llm_client.py      # LM Studio OpenAI API client & map-reduce engine
+│   ├── pdf_processor.py   # PyPDF extraction, page analysis, and chunking
+│   └── ui.py              # Custom CSS styling, hero banner, and UI components
+└── tests/
+    ├── __init__.py        # Test package initialization
+    ├── test_app_imports.py   # Syntax and import sanity tests
+    ├── test_llm_client.py    # Unit tests for LLM client functions
+    └── test_pdf_processor.py # Unit tests for PDF parsing and chunking
 ```
 
 ---

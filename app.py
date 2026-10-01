@@ -93,14 +93,6 @@ with st.sidebar:
     max_chunk_chars = st.slider("Chunk Size (Characters)", min_value=1500, max_value=8000, value=3500, step=500, help="Controls size of text chunks for large PDFs")
     enable_map_reduce = st.checkbox("Enable Map-Reduce for Large PDFs", value=True, help="Splits large PDFs into chunks and synthesizes them")
     enable_notifications = st.checkbox("🔔 Desktop Notifications when ready", value=True, help="Triggers system desktop notification when analysis finishes")
-    if enable_notifications:
-        test_notif_btn = st.button("🧪 Test Desktop Notification", use_container_width=True)
-        if test_notif_btn:
-            trigger_browser_notification(
-                title="DocuMind AI Test 🔔",
-                body="Desktop notifications are enabled and working correctly!"
-            )
-            st.toast("Sent test notification to browser!")
 
     st.markdown("---")
     st.markdown(
