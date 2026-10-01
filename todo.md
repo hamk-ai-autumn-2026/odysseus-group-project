@@ -14,4 +14,4 @@
 - [ ] Add csv input
 - [ ] Add any other file types
 - [ ] Add image support
-- [ ] Add pdf image support
+- [x] Add pdf image support
