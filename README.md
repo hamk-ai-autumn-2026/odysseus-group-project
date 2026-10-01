@@ -23,7 +23,7 @@ A fully local, privacy-first PDF document analyzer, summarizer, and interactive 
 
 ## 🛠️ Requirements & Stack
 
-- **Package Manager**: [uv](https://github.com/astral-sh/uv) (Fast Python package manager)
+- **Package Manager**: [uv](https://docs.astral.sh/uv/) (Fast Python package manager)
 - **PDF Parser**: `pypdf`
 - **LLM Local Server**: [LM Studio](https://lmstudio.ai/)
 - **Frontend Framework**: `streamlit`
