@@ -2,8 +2,32 @@ from typing import List, Dict, Any
 import pypdf
 import io
 import math
+import base64
+import fitz
 
-def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
+
+def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Dict[str, Any]]:
+    """Render each PDF page as a compressed image for vision-capable LLMs."""
+    document = fitz.open(stream=file_bytes, filetype="pdf")
+    images = []
+    try:
+        for page_number, page in enumerate(document, start=1):
+            rect = page.rect
+            scale = min(max_dimension / max(rect.width, rect.height), 2.0)
+            matrix = fitz.Matrix(scale, scale)
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            image_bytes = pixmap.tobytes("jpeg", jpg_quality=75)
+            images.append({
+                "page_num": page_number,
+                "data_url": "data:image/jpeg;base64,"
+                + base64.b64encode(image_bytes).decode("ascii"),
+            })
+    finally:
+        document.close()
+    return images
+
+
+def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str, Any]:
     """
     Extracts text, metadata, and statistics from PDF file bytes.
     """
@@ -22,7 +46,8 @@ def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
             "page_num": i + 1,
             "text": clean_text,
             "char_count": len(clean_text),
-            "word_count": len(clean_text.split())
+            "word_count": len(clean_text.split()),
+            "has_image": False,
         })
         if clean_text:
             full_text += f"\n--- Page {i + 1} ---\n" + clean_text
@@ -43,6 +68,11 @@ def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
     # Average reading speed ~ 200 words per min
     est_reading_time = math.ceil(total_words / 200) if total_words > 0 else 0
     
+    page_images = _render_page_images(file_bytes) if include_images else []
+    images_by_page = {image["page_num"]: image for image in page_images}
+    for page in pages_data:
+        page["has_image"] = page["page_num"] in images_by_page
+
     return {
         "pages": pages_data,
         "full_text": full_text.strip(),
@@ -50,7 +80,8 @@ def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
         "total_words": total_words,
         "total_chars": total_chars,
         "est_reading_time": est_reading_time,
-        "metadata": metadata
+        "metadata": metadata,
+        "page_images": page_images,
     }
 
 def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap: int = 400) -> List[Dict[str, Any]]:
@@ -67,8 +98,11 @@ def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap:
         page_num = page["page_num"]
         text = page["text"]
         
-        if not text:
+        if not text and not page.get("has_image", False):
             continue
+
+        if not text:
+            text = "[Image-only page. Analyze the attached page image.]"
             
         # Split page into paragraphs or sentences if page text is huge
         paragraphs = text.split("\n\n")

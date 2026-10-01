@@ -33,6 +33,9 @@ def test_extract_pdf_data_structure():
     assert data["total_pages"] == 2
     assert data["metadata"]["title"] == "Automated Test Document"
     assert data["metadata"]["author"] == "PyTest Suite"
+    assert len(data["page_images"]) == 2
+    assert data["page_images"][0]["data_url"].startswith("data:image/jpeg;base64,")
+    assert all(page["has_image"] for page in data["pages"])
 
 def test_chunk_pdf_pages():
     mock_pages = [

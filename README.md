@@ -7,7 +7,7 @@ A fully local, privacy-first PDF document analyzer, summarizer, and interactive 
 ## ✨ Features
 
 - 🔒 **100% Local & Private**: No data leaves your machine. Powered by local LLMs via LM Studio.
-- ⚡ **Fast PDF Text Extraction**: Uses `pypdf` for fast text parsing, metadata extraction, page indexing, and search.
+- ⚡ **Multimodal PDF Extraction**: Uses `pypdf` for text and metadata plus PyMuPDF page rendering, so vision-capable local LLMs can analyze scanned pages, charts, tables, diagrams, and figures.
 - 🎛️ **Multi-Preset Summarization**:
   - 📝 **Executive Summary** (Overview, Main Themes, Conclusions)
   - 📌 **Key Insights & Bullet Points** (Top findings with bold callouts)
@@ -24,7 +24,7 @@ A fully local, privacy-first PDF document analyzer, summarizer, and interactive 
 ## 🛠️ Requirements & Stack
 
 - **Package Manager**: [uv](https://docs.astral.sh/uv/) (Fast Python package manager)
-- **PDF Parser**: `pypdf`
+- **PDF Parser**: `pypdf` and `PyMuPDF` (page rendering for vision analysis)
 - **LLM Local Server**: [LM Studio](https://lmstudio.ai/)
 - **Frontend Framework**: `streamlit`
 - **LLM Client**: `openai` (configured to point to LM Studio's local endpoint `http://localhost:1234/v1`)
@@ -81,6 +81,10 @@ Running with `uv` automatically sets up the venv and syncs dependencies:
 ```bash
 uv sync
 ```
+
+For image analysis, load a vision-capable multimodal model in LM Studio. Text-only
+models can still analyze the extracted PDF text, but they cannot interpret rendered
+page images.
 
 ### 4. Run the Application
 

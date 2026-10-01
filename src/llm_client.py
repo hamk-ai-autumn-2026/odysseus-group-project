@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Generator, Optional, Tuple
+from typing import List, Dict, Any, Generator, Optional, Tuple, Union
 import openai
 from openai import OpenAI
 
@@ -62,7 +62,7 @@ def generate_streaming_response(
     client: OpenAI,
     model: str,
     system_prompt: str,
-    user_content: str,
+    user_content: Union[str, List[Dict[str, Any]]],
     temperature: float = 0.3,
     check_stop: Optional[Any] = None
 ) -> Generator[str, None, None]:
@@ -109,7 +109,8 @@ def run_single_pass_summary(
     custom_instruction: Optional[str] = None,
     temperature: float = 0.3,
     max_context_chars: int = 12000,
-    check_stop: Optional[Any] = None
+    check_stop: Optional[Any] = None,
+    page_images: Optional[List[Dict[str, Any]]] = None
 ) -> Generator[str, None, None]:
     """
     Generates document summary in a single pass for smaller documents.
@@ -125,7 +126,18 @@ def run_single_pass_summary(
     if len(document_text) > max_context_chars:
         safe_text += "\n\n[... Document truncated for single-pass analysis. Use Map-Reduce for full document analysis ...]"
         
-    user_content = f"Here is the document text:\n\n{safe_text}\n\nPlease analyze according to instructions."
+    text_part = (
+        f"Here is the document text:\n\n{safe_text}\n\n"
+        "Analyze the attached page images as well. Extract information from charts, tables, "
+        "diagrams, scanned text, and figures that is not present in the text."
+    )
+    user_content: Union[str, List[Dict[str, Any]]] = text_part
+    if page_images:
+        user_content = [{"type": "text", "text": text_part}]
+        user_content.extend(
+            {"type": "image_url", "image_url": {"url": image["data_url"]}}
+            for image in page_images
+        )
     
     return generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
 
@@ -137,7 +149,8 @@ def map_reduce_summary(
     custom_instruction: Optional[str] = None,
     temperature: float = 0.3,
     status_callback=None,
-    check_stop: Optional[Any] = None
+    check_stop: Optional[Any] = None,
+    page_images: Optional[List[Dict[str, Any]]] = None
 ) -> Generator[str, None, None]:
     """
     Performs Map-Reduce summarization for multi-chunk large PDFs.
@@ -160,7 +173,22 @@ def map_reduce_summary(
             "Summarize the following excerpt from a document. Capture all critical facts, data points, "
             "names, and main ideas presented in this section."
         )
-        map_user_content = f"Document excerpt ({chunk['page_range']}):\n\n{chunk['text']}"
+        map_text = (
+            f"Document excerpt ({chunk['page_range']}):\n\n{chunk['text']}\n\n"
+            "Also inspect the attached page images for visual information missing from the excerpt."
+        )
+        chunk_page_numbers = set(chunk.get("pages", []))
+        chunk_images = [
+            image for image in (page_images or [])
+            if image["page_num"] in chunk_page_numbers
+        ]
+        map_user_content: Union[str, List[Dict[str, Any]]] = map_text
+        if chunk_images:
+            map_user_content = [{"type": "text", "text": map_text}]
+            map_user_content.extend(
+                {"type": "image_url", "image_url": {"url": image["data_url"]}}
+                for image in chunk_images
+            )
         
         try:
             resp = client.chat.completions.create(
@@ -276,4 +304,3 @@ def chat_stream_response(
             )
         else:
             yield f"\n\n⚠️ **LM Studio Error**: {err_str}"
-

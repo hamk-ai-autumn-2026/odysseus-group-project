@@ -113,9 +113,9 @@ uploaded_file = st.file_uploader("Upload a PDF document to begin analysis", type
 if uploaded_file is not None:
     # Check if a new file was uploaded
     if st.session_state.file_name != uploaded_file.name:
-        with st.spinner("📄 Extracting text & metadata from PDF with PyPDF..."):
+        with st.spinner("📄 Extracting text, metadata, and page images from PDF..."):
             file_bytes = uploaded_file.read()
-            st.session_state.pdf_data = extract_pdf_data(file_bytes)
+            st.session_state.pdf_data = extract_pdf_data(file_bytes, include_images=True)
             st.session_state.file_name = uploaded_file.name
             st.session_state.chat_history = []
             st.session_state.summary_output = ""
@@ -223,7 +223,8 @@ if pdf_data:
                                 custom_instruction=custom_instruction,
                                 temperature=temperature,
                                 status_callback=update_status,
-                                check_stop=lambda: st.session_state.get("stop_requested", False)
+                                check_stop=lambda: st.session_state.get("stop_requested", False),
+                                page_images=pdf_data.get("page_images", [])
                             )
                             
                             full_response = output_container.write_stream(generator)
@@ -241,7 +242,8 @@ if pdf_data:
                                     preset_name=preset_choice,
                                     custom_instruction=custom_instruction,
                                     temperature=temperature,
-                                    check_stop=lambda: st.session_state.get("stop_requested", False)
+                                    check_stop=lambda: st.session_state.get("stop_requested", False),
+                                    page_images=pdf_data.get("page_images", [])
                                 )
                                 full_response = output_container.write_stream(generator)
                                 st.session_state.summary_output = full_response
