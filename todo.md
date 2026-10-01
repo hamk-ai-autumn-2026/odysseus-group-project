@@ -15,3 +15,6 @@
 - [ ] Add any other file types
 - [ ] Add image support
 - [ ] Add pdf image support
+- [ ] Stop button doesnt work
+- [ ] Summarize and analysis inconsistent
+- [ ] Theme toggle buttons not visible

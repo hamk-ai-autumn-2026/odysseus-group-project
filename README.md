@@ -144,7 +144,3 @@ odysseus-group-project/
 ```
 
 ---
-
-## License
-
-MIT License.
