@@ -3,18 +3,18 @@ import pypdf
 import io
 import math
 import base64
-import fitz
+import pymupdf
 
 
 def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Dict[str, Any]]:
     """Render each PDF page as a compressed image for vision-capable LLMs."""
-    document = fitz.open(stream=file_bytes, filetype="pdf")
+    document = pymupdf.open(stream=file_bytes, filetype="pdf")
     images = []
     try:
         for page_number, page in enumerate(document, start=1):
             rect = page.rect
             scale = min(max_dimension / max(rect.width, rect.height), 2.0)
-            matrix = fitz.Matrix(scale, scale)
+            matrix = pymupdf.Matrix(scale, scale)
             pixmap = page.get_pixmap(matrix=matrix, alpha=False)
             image_bytes = pixmap.tobytes("jpeg", jpg_quality=75)
             images.append({
