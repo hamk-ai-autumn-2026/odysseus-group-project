@@ -64,16 +64,21 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
     """
     Extracts text, metadata, and statistics from PDF file bytes.
     """
-    pdf_stream = io.BytesIO(file_bytes)
-    reader = pypdf.PdfReader(pdf_stream)
-    
-    total_pages = len(reader.pages)
+    doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+    total_pages = len(doc)
     pages_data = []
     full_text = ""
     
-    for i, page in enumerate(reader.pages):
-        page_text = page.extract_text() or ""
-        # Clean basic invisible control chars while preserving newlines
+    pdf_stream = io.BytesIO(file_bytes)
+    reader = pypdf.PdfReader(pdf_stream)
+    
+    for i, page in enumerate(doc):
+        # Extract text via PyMuPDF (superior handling for math formulas, LaTeX font CMaps, equations & symbols)
+        page_text = page.get_text("text") or ""
+        # Fallback to pypdf if PyMuPDF yields empty string for page
+        if not page_text.strip() and i < len(reader.pages):
+            page_text = reader.pages[i].extract_text() or ""
+            
         clean_text = page_text.strip()
         pages_data.append({
             "page_num": i + 1,
@@ -84,6 +89,9 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
         })
         if clean_text:
             full_text += f"\n--- Page {i + 1} ---\n" + clean_text
+            
+    doc.close()
+
             
     # Extract metadata
     raw_meta = reader.metadata or {}
