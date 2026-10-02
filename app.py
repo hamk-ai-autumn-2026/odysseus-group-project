@@ -52,7 +52,10 @@ with st.sidebar:
     
     col_conn1, col_conn2 = st.columns([1, 1])
     with col_conn1:
-        test_conn_btn = st.button("🔄 Check Connection", use_container_width=True)
+        test_conn_btn = st.button("🔌 Check Connection", use_container_width=True)
+    with col_conn2:
+        if st.button("🔄 Reload App", use_container_width=True, help="Force reload and refresh the application"):
+            st.rerun()
         
     # Check server status
     is_connected, status_msg, available_models = check_lm_studio_connection(lm_url, lm_key)
