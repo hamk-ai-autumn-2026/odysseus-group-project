@@ -6,6 +6,8 @@ def test_app_and_src_imports():
     modules = [
         "src",
         "src.pdf_processor",
+        "src.code_analyzer",
+        "src.code_reader",
         "src.llm_client",
         "src.ui",
         "src.desktop_launcher",

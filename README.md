@@ -8,7 +8,8 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
 
 - **100% Local & Private**: No data leaves your machine. Powered by local LLMs via LM Studio.
 - **Standalone Desktop Interface**: Runs in a dedicated native window without opening an external web browser.
-- **Multi-format Extraction**: Analyzes PDF, Markdown (`.md`/`.markdown`), plain text (`.txt`), and JSON (`.json`) files. PDFs also support page images for vision-capable local LLMs.
+- **Multi-format Extraction**: Analyzes PDF, Markdown (`.md`/`.markdown`), plain text (`.txt`), JSON (`.json`), Python (`.py`/`.pyi`), and C++/C source files (`.cpp`, `.cc`, `.cxx`, `.c`, `.h`, `.hpp`). PDFs also support page images for vision-capable local LLMs.
+- **Code Reader / Analyzer**: Detects Python and C++ source structure, counts functions/classes/imports, chunks code by line ranges, and supports keyword search across source files.
 - **Summary Language Selection**: Choose Same as Document, English, or Finnish for single-pass and map-reduce summaries.
 - **Multi-Preset Summarization**:
   - Executive Summary (Overview, Main Themes, Conclusions)
@@ -26,7 +27,7 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
 ## Requirements & Stack
 
 - **Package Manager**: [uv](https://docs.astral.sh/uv/) (Fast Python package manager)
-- **Document Parsers**: `pypdf` and `PyMuPDF` for PDFs; Python standard library for Markdown, text, and JSON
+- **Document & Code Parsers**: `pypdf` and `PyMuPDF` for PDFs; Python standard library for Markdown, text, and JSON; built-in source parsing for Python and C++/C files
 - **Standalone Window Engine**: `pywebview`
 - **LLM Local Server**: [LM Studio](https://lmstudio.ai/)
 - **Frontend Framework**: `streamlit`
@@ -112,6 +113,8 @@ Launch in a standard browser window via Streamlit:
 uv run streamlit run app.py
 ```
 
+The app accepts source-code files as well as PDFs and text documents, so you can upload sample projects, scripts, or C++ sources for local analysis.
+
 ---
 
 ## Running Tests & Sanity Checks
@@ -136,10 +139,18 @@ odysseus-group-project/
 ├── .env.example           # Environment configuration template
 ├── README.md              # Project documentation
 ├── Docs/                  # Sample PDF documents and output reports
+├── testdocs/              # Sample text, JSON, and source-code fixtures for validation
+│   ├── sample_python.py
+│   ├── sample_cpp.cpp
+│   ├── test_document.md
+│   ├── test_document.txt
+│   └── test_document.json
 ├── scripts/
 │   └── run_checks.sh      # Sanity check & test execution script
 ├── src/
 │   ├── __init__.py        # Package initialization
+│   ├── code_analyzer.py   # Code parsing, detection, chunking, and search for Python/C++
+│   ├── code_reader.py     # Compatibility wrapper for code-analysis entry points
 │   ├── desktop_launcher.py# Standalone native window launcher via pywebview
 │   ├── llm_client.py      # LM Studio OpenAI API client & map-reduce engine
 │   ├── pdf_processor.py   # Multi-format extraction, PDF image rendering, and chunking
@@ -147,8 +158,10 @@ odysseus-group-project/
 └── tests/
     ├── __init__.py        # Test package initialization
     ├── test_app_imports.py   # Syntax and import sanity tests
+    ├── test_code_analyzer.py # Unit tests for Python/C++ code parsing
     ├── test_llm_client.py    # Unit tests for LLM client functions
-    └── test_pdf_processor.py # Unit tests for PDF parsing and chunking
+    ├── test_pdf_processor.py # Unit tests for PDF and text parsing
+    └── test_code_reader.py   # Compatibility checks for the code reader API
 ```
 
 ---
