@@ -177,11 +177,12 @@ if pdf_data:
         sum_col1, sum_col2 = st.columns([1, 2])
         
         with sum_col1:
-            preset_choice = st.radio(
-                "Analysis Preset",
+            preset_choice = st.selectbox(
+                "📊 Analysis Preset",
                 options=list(PROMPT_PRESETS.keys()),
                 index=0,
-                key="preset_radio"
+                key="preset_selectbox",
+                help="Select the prompt preset or custom prompt for document analysis"
             )
             
             language_choice = st.selectbox(
