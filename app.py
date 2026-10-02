@@ -171,6 +171,13 @@ if pdf_data:
                 key="preset_radio"
             )
             
+            language_choice = st.selectbox(
+                "🌐 Output Language",
+                options=["Same as Document", "English", "Finnish"],
+                index=0,
+                help="Choose summary report output language"
+            )
+            
             custom_instruction = ""
             if preset_choice == "Custom Prompt":
                 custom_instruction = st.text_area(
@@ -221,6 +228,7 @@ if pdf_data:
                                 chunks=chunks,
                                 preset_name=preset_choice,
                                 custom_instruction=custom_instruction,
+                                language=language_choice,
                                 temperature=temperature,
                                 status_callback=update_status,
                                 check_stop=lambda: st.session_state.get("stop_requested", False)
@@ -240,11 +248,13 @@ if pdf_data:
                                     document_text=full_text,
                                     preset_name=preset_choice,
                                     custom_instruction=custom_instruction,
+                                    language=language_choice,
                                     temperature=temperature,
                                     check_stop=lambda: st.session_state.get("stop_requested", False)
                                 )
                                 full_response = output_container.write_stream(generator)
                                 st.session_state.summary_output = full_response
+
                                 
                         # Fire desktop tray notification if enabled and completed cleanly
                         if enable_notifications and not st.session_state.stop_requested and st.session_state.summary_output:

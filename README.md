@@ -43,6 +43,9 @@ Ensure you have **LM Studio** and **UV** installed on your system.
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
+  ```bash
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
 
 ### 2. Configure & Start LM Studio Server
 

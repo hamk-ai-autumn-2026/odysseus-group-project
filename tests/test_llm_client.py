@@ -6,6 +6,7 @@ from src.llm_client import (
     get_openai_client,
     check_lm_studio_connection,
     run_single_pass_summary,
+    map_reduce_summary,
     chat_stream_response
 )
 
@@ -37,15 +38,28 @@ def test_check_lm_studio_connection_offline():
     assert "Could not connect" in status_msg or "Error" in status_msg
     assert models == []
 
-def test_run_single_pass_summary_truncation():
-    # Verify long document text gets safely truncated in single-pass mode
-    long_text = "Word " * 5000  # ~25,000 characters
+def test_run_single_pass_summary_generator():
+    long_text = "Word " * 500
     generator = run_single_pass_summary(
-        client=None, # Will fail if actually invoked via API, but we test prompt construction before iteration
+        client=None,
         model="dummy",
         document_text=long_text,
         preset_name="Executive Summary",
         max_context_chars=1000
     )
-    # Generator object returned
     assert generator is not None
+    assert hasattr(generator, "__next__")
+
+def test_map_reduce_summary_generator():
+    chunks = [
+        {"chunk_id": 1, "page_range": "Page 1", "text": "Sample text for page 1"},
+        {"chunk_id": 2, "page_range": "Page 2", "text": "Sample text for page 2"}
+    ]
+    generator = map_reduce_summary(
+        client=None,
+        model="dummy",
+        chunks=chunks,
+        preset_name="Executive Summary"
+    )
+    assert generator is not None
+    assert hasattr(generator, "__next__")

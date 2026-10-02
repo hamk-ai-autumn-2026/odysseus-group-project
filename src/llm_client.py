@@ -101,12 +101,19 @@ def generate_streaming_response(
         else:
             yield f"\n\n⚠️ **LM Studio Error**: {err_str}"
 
+LANGUAGE_PROMPTS = {
+    "Same as Document": "\n\nLanguage requirement: Write your output report in the same primary language as the source document.",
+    "English": "\n\nLanguage requirement: Write your entire summary report in English regardless of the input document language.",
+    "Finnish": "\n\nLanguage requirement: Write your entire summary report in Finnish (Suomi). Kirjoita koko yhteenveto ja raportti suomeksi riippumatta syötekielestä."
+}
+
 def run_single_pass_summary(
     client: OpenAI,
     model: str,
     document_text: str,
     preset_name: str,
     custom_instruction: Optional[str] = None,
+    language: str = "Same as Document",
     temperature: float = 0.3,
     max_context_chars: int = 12000,
     check_stop: Optional[Any] = None
@@ -120,6 +127,9 @@ def run_single_pass_summary(
     elif custom_instruction:
         system_prompt += f"\nAdditional Instruction: {custom_instruction}"
         
+    lang_instruction = LANGUAGE_PROMPTS.get(language, LANGUAGE_PROMPTS["Same as Document"])
+    system_prompt += lang_instruction
+
     # Cap text length to prevent context overflow
     safe_text = document_text[:max_context_chars]
     if len(document_text) > max_context_chars:
@@ -127,7 +137,7 @@ def run_single_pass_summary(
         
     user_content = f"Here is the document text:\n\n{safe_text}\n\nPlease analyze according to instructions."
     
-    return generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
+    yield from generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
 
 def map_reduce_summary(
     client: OpenAI,
@@ -135,6 +145,7 @@ def map_reduce_summary(
     chunks: List[Dict[str, Any]],
     preset_name: str,
     custom_instruction: Optional[str] = None,
+    language: str = "Same as Document",
     temperature: float = 0.3,
     status_callback=None,
     check_stop: Optional[Any] = None
@@ -160,6 +171,11 @@ def map_reduce_summary(
             "Summarize the following excerpt from a document. Capture all critical facts, data points, "
             "names, and main ideas presented in this section."
         )
+        if language == "Finnish":
+            map_prompt += " Write the excerpt summary in Finnish (Suomi)."
+        elif language == "English":
+            map_prompt += " Write the excerpt summary in English."
+
         map_user_content = f"Document excerpt ({chunk['page_range']}):\n\n{chunk['text']}"
         
         try:
@@ -193,13 +209,17 @@ def map_reduce_summary(
     elif custom_instruction:
         system_prompt += f"\nAdditional Instruction: {custom_instruction}"
         
+    lang_instruction = LANGUAGE_PROMPTS.get(language, LANGUAGE_PROMPTS["Same as Document"])
+    system_prompt += lang_instruction
+
     user_content = (
         "Below are section-by-section summaries extracted from the full document. "
         "Combine and synthesize them into a coherent, seamless, and high-quality final document report.\n\n"
         f"{combined_map_text}"
     )
     
-    return generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
+    yield from generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
+
 
 def chat_stream_response(
     client: OpenAI,

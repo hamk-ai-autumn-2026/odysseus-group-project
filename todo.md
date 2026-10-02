@@ -18,3 +18,5 @@
 - [ ] Stop button doesnt work
 - [ ] Summarize and analysis inconsistent
 - [ ] Theme toggle buttons not visible
+- [ ] Language buttons (default, english, finnish)
+- [ ] Reload app button (for pywebview)
