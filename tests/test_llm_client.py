@@ -16,8 +16,10 @@ def test_prompt_presets_completeness():
         "Key Insights & Bullet Points",
         "Technical Breakdown",
         "Actionable Takeaways & Next Steps",
+        "Math & Quantitative Analysis",
         "Custom Prompt"
     ]
+
     for preset in required_presets:
         assert preset in PROMPT_PRESETS
         assert isinstance(PROMPT_PRESETS[preset], str)
