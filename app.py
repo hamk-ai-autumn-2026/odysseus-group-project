@@ -1,6 +1,6 @@
 import streamlit as st
 import datetime
-from src.pdf_processor import extract_pdf_data, chunk_pdf_pages, search_in_pages
+from src.pdf_processor import extract_document_data, chunk_pdf_pages, search_in_pages
 from src.llm_client import (
     DEFAULT_BASE_URL,
     DEFAULT_API_KEY,
@@ -20,7 +20,7 @@ from src.ui import (
 )
 
 st.set_page_config(
-    page_title="DocuMind Local AI - PDF Analyzer",
+    page_title="DocuMind Local AI - Document Analyzer",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -90,8 +90,8 @@ with st.sidebar:
     st.markdown("### 🎛️ Processing Settings")
     
     temperature = st.slider("Temperature (Creativity)", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
-    max_chunk_chars = st.slider("Chunk Size (Characters)", min_value=1500, max_value=8000, value=3500, step=500, help="Controls size of text chunks for large PDFs")
-    enable_map_reduce = st.checkbox("Enable Map-Reduce for Large PDFs", value=True, help="Splits large PDFs into chunks and synthesizes them")
+    max_chunk_chars = st.slider("Chunk Size (Characters)", min_value=1500, max_value=8000, value=3500, step=500, help="Controls size of text chunks for large documents")
+    enable_map_reduce = st.checkbox("Enable Map-Reduce for Large Documents", value=True, help="Splits large documents into chunks and synthesizes them")
     enable_notifications = st.checkbox("🔔 Desktop Notifications when ready", value=True, help="Triggers system desktop notification when analysis finishes")
 
     st.markdown("---")
@@ -108,18 +108,31 @@ with st.sidebar:
 render_hero_header()
 
 # File Uploader Section
-uploaded_file = st.file_uploader("Upload a PDF document to begin analysis", type=["pdf"], key="pdf_uploader")
+uploaded_file = st.file_uploader(
+    "Upload a document to begin analysis",
+    type=["pdf", "md", "markdown", "txt", "json"],
+    key="pdf_uploader",
+)
 
 if uploaded_file is not None:
     # Check if a new file was uploaded
     if st.session_state.file_name != uploaded_file.name:
-        with st.spinner("📄 Extracting text, metadata, and page images from PDF..."):
+        with st.spinner("📄 Extracting text and metadata from document..."):
             file_bytes = uploaded_file.read()
-            st.session_state.pdf_data = extract_pdf_data(file_bytes, include_images=True)
-            st.session_state.file_name = uploaded_file.name
-            st.session_state.chat_history = []
-            st.session_state.summary_output = ""
-            st.session_state.stop_requested = False
+            try:
+                st.session_state.pdf_data = extract_document_data(
+                    file_bytes,
+                    uploaded_file.name,
+                    include_images=True,
+                )
+            except ValueError as error:
+                st.session_state.pdf_data = None
+                st.error(f"⚠️ Could not read document: {error}")
+            else:
+                st.session_state.file_name = uploaded_file.name
+                st.session_state.chat_history = []
+                st.session_state.summary_output = ""
+                st.session_state.stop_requested = False
 
 pdf_data = st.session_state.pdf_data
 
@@ -134,8 +147,8 @@ if pdf_data:
         est_read_min=pdf_data["est_reading_time"]
     )
     
-    # PDF Metadata expander
-    with st.expander("ℹ️ PDF Document Metadata & File Details"):
+    # Document metadata expander
+    with st.expander("ℹ️ Document Metadata & File Details"):
         meta = pdf_data["metadata"]
         m_col1, m_col2 = st.columns(2)
         with m_col1:
@@ -152,7 +165,7 @@ if pdf_data:
     # --- TABS ---
     tab_summary, tab_chat, tab_inspect, tab_setup = st.tabs([
         "📊 Summarization & Analysis",
-        "💬 Chat with PDF",
+        "💬 Chat with Document",
         "🔍 Inspection & Search",
         "🛠️ LM Studio Setup"
     ])
@@ -286,10 +299,10 @@ if pdf_data:
                         use_container_width=True
                     )
 
-    # --- TAB 2: CHAT WITH PDF ---
+    # --- TAB 2: CHAT WITH DOCUMENT ---
     with tab_chat:
         st.markdown("### 💬 Interactive Q&A with Document")
-        st.caption("Ask questions about specific sections, figures, statements, or details in this PDF.")
+        st.caption("Ask questions about specific sections, figures, statements, or details in this document.")
         
         # Display suggestion buttons
         st.markdown("**Suggested Quick Questions:**")
@@ -317,7 +330,7 @@ if pdf_data:
                 st.markdown(message["content"])
 
         # Chat input box
-        prompt_input = st.chat_input("Ask any question about this PDF document...")
+        prompt_input = st.chat_input("Ask any question about this document...")
         
         user_query = prompt_input or suggested_q
         
@@ -392,5 +405,5 @@ if pdf_data:
 
 else:
     # Empty state prompt
-    st.info("👆 Please upload a PDF document using the file uploader above to get started.")
+    st.info("👆 Please upload a PDF, Markdown, TXT, or JSON document using the file uploader above to get started.")
     render_lm_studio_setup_guide(lm_url)

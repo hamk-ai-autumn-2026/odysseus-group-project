@@ -26,7 +26,7 @@ PROMPT_PRESETS = {
         "Categorize them into clear action items."
     ),
     "Custom Prompt": (
-        "You are a helpful AI assistant reading a PDF document. Answer the user's instructions accurately based strictly on the document text."
+        "You are a helpful AI assistant reading a document. Answer the user's instructions accurately based strictly on the document text."
     )
 }
 
@@ -153,7 +153,7 @@ def map_reduce_summary(
     page_images: Optional[List[Dict[str, Any]]] = None
 ) -> Generator[str, None, None]:
     """
-    Performs Map-Reduce summarization for multi-chunk large PDFs.
+    Performs Map-Reduce summarization for multi-chunk large documents.
     Stage 1: Summarize each chunk into key observations.
     Stage 2: Combine chunk summaries into final formatted report.
     """
@@ -265,10 +265,10 @@ def chat_stream_response(
         selected_context = document_context[:max_chat_context_chars]
 
     system_prompt = (
-        "You are an AI Document Assistant. Answer the user's questions accurately based ONLY on the provided PDF content.\n"
+        "You are an AI Document Assistant. Answer the user's questions accurately based ONLY on the provided document content.\n"
         "If the answer cannot be found in the document, explicitly state that the document does not contain that information.\n"
         "Always cite relevant page numbers or section details when possible.\n\n"
-        f"--- PDF DOCUMENT CONTENT EXCERPTS ---\n{selected_context}\n--- END DOCUMENT CONTENT ---"
+        f"--- DOCUMENT CONTENT EXCERPTS ---\n{selected_context}\n--- END DOCUMENT CONTENT ---"
     )
     
     messages = [{"role": "system", "content": system_prompt}]

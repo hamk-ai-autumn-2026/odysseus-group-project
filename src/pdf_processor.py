@@ -4,6 +4,11 @@ import io
 import math
 import base64
 import pymupdf
+import json
+from pathlib import Path
+
+
+SUPPORTED_DOCUMENT_EXTENSIONS = ("pdf", "md", "markdown", "txt", "json")
 
 
 def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Dict[str, Any]]:
@@ -82,6 +87,62 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
         "est_reading_time": est_reading_time,
         "metadata": metadata,
         "page_images": page_images,
+    }
+
+
+def extract_document_data(
+    file_bytes: bytes,
+    filename: str,
+    include_images: bool = True,
+) -> Dict[str, Any]:
+    """Extract text and analysis metadata from a supported document format."""
+    extension = Path(filename).suffix.lower().lstrip(".")
+    if extension == "pdf":
+        return extract_pdf_data(file_bytes, include_images=include_images)
+
+    if extension not in SUPPORTED_DOCUMENT_EXTENSIONS:
+        supported = ", ".join(f".{item}" for item in SUPPORTED_DOCUMENT_EXTENSIONS)
+        raise ValueError(f"Unsupported document type '.{extension or 'unknown'}'. Supported types: {supported}.")
+
+    try:
+        text = file_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{filename} is not valid UTF-8 text.") from error
+
+    if extension == "json":
+        try:
+            parsed_json = json.loads(text)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{filename} contains invalid JSON: {error.msg}.") from error
+        text = json.dumps(parsed_json, indent=2, ensure_ascii=False)
+
+    clean_text = text.strip()
+    page = {
+        "page_num": 1,
+        "text": clean_text,
+        "char_count": len(clean_text),
+        "word_count": len(clean_text.split()),
+        "has_image": False,
+    }
+    total_words = page["word_count"]
+    total_chars = page["char_count"]
+
+    return {
+        "pages": [page],
+        "full_text": clean_text,
+        "total_pages": 1,
+        "total_words": total_words,
+        "total_chars": total_chars,
+        "est_reading_time": math.ceil(total_words / 200) if total_words else 0,
+        "metadata": {
+            "title": filename,
+            "author": "N/A",
+            "subject": f"{extension.upper()} document",
+            "creator": "N/A",
+            "producer": "N/A",
+            "creation_date": "N/A",
+        },
+        "page_images": [],
     }
 
 def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap: int = 400) -> List[Dict[str, Any]]:
