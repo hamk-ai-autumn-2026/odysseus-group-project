@@ -1,5 +1,10 @@
-"""PDF Analyzer and Summarizer core package."""
-from src.pdf_processor import extract_pdf_data, chunk_pdf_pages, search_in_pages
+"""Document Analyzer and Summarizer core package."""
+from src.pdf_processor import (
+    extract_document_data,
+    extract_pdf_data,
+    chunk_pdf_pages,
+    search_in_pages,
+)
 from src.llm_client import (
     DEFAULT_BASE_URL,
     DEFAULT_API_KEY,
@@ -19,6 +24,7 @@ from src.ui import (
 )
 
 __all__ = [
+    "extract_document_data",
     "extract_pdf_data",
     "chunk_pdf_pages",
     "search_in_pages",

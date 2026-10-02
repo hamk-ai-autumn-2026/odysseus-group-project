@@ -183,7 +183,7 @@ def render_hero_header():
                 <div>
                     <div class="hero-title">📄 DocuMind AI</div>
                     <div class="hero-subtitle">
-                        Privacy-first, 100% local PDF Document Analyzer & Summarizer powered by <b>LM Studio</b>, <b>PyPDF</b>, and <b>UV</b>.
+                        Privacy-first, 100% local Document Analyzer & Summarizer powered by <b>LM Studio</b>, <b>PyPDF</b>, and <b>UV</b>.
                     </div>
                 </div>
                 <div>
@@ -245,7 +245,7 @@ def render_lm_studio_setup_guide(base_url: str):
     """
     Renders an aesthetic step-by-step setup guide for LM Studio.
     """
-    st.markdown("### 🚀 Setting up LM Studio for Local PDF Summarization")
+    st.markdown("### 🚀 Setting up LM Studio for Local Document Analysis")
     
     st.markdown(
         f"""
@@ -314,7 +314,7 @@ def trigger_browser_notification(title: str, body: str):
             if (window.parent && window.parent.document) {{
                 window.parent.document.title = "🔔 Analysis Complete! - DocuMind AI";
                 setTimeout(function() {{
-                    window.parent.document.title = "DocuMind Local AI - PDF Analyzer";
+                    window.parent.document.title = "DocuMind Local AI - Document Analyzer";
                 }}, 6000);
             }}
         }} catch(e) {{}}
@@ -340,6 +340,5 @@ def trigger_browser_notification(title: str, body: str):
     </script>
     """
     components.html(js_code, height=0, width=0)
-
 
 

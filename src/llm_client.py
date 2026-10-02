@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Generator, Optional, Tuple
+from typing import List, Dict, Any, Generator, Optional, Tuple, Union
 import openai
 from openai import OpenAI
 
@@ -26,7 +26,7 @@ PROMPT_PRESETS = {
         "Categorize them into clear action items."
     ),
     "Custom Prompt": (
-        "You are a helpful AI assistant reading a PDF document. Answer the user's instructions accurately based strictly on the document text."
+        "You are a helpful AI assistant reading a document. Answer the user's instructions accurately based strictly on the document text."
     )
 }
 
@@ -62,7 +62,7 @@ def generate_streaming_response(
     client: OpenAI,
     model: str,
     system_prompt: str,
-    user_content: str,
+    user_content: Union[str, List[Dict[str, Any]]],
     temperature: float = 0.3,
     check_stop: Optional[Any] = None
 ) -> Generator[str, None, None]:
@@ -116,7 +116,8 @@ def run_single_pass_summary(
     language: str = "Same as Document",
     temperature: float = 0.3,
     max_context_chars: int = 12000,
-    check_stop: Optional[Any] = None
+    check_stop: Optional[Any] = None,
+    page_images: Optional[List[Dict[str, Any]]] = None
 ) -> Generator[str, None, None]:
     """
     Generates document summary in a single pass for smaller documents.
@@ -135,7 +136,18 @@ def run_single_pass_summary(
     if len(document_text) > max_context_chars:
         safe_text += "\n\n[... Document truncated for single-pass analysis. Use Map-Reduce for full document analysis ...]"
         
-    user_content = f"Here is the document text:\n\n{safe_text}\n\nPlease analyze according to instructions."
+    text_part = (
+        f"Here is the document text:\n\n{safe_text}\n\n"
+        "Analyze the attached page images as well. Extract information from charts, tables, "
+        "diagrams, scanned text, and figures that is not present in the text."
+    )
+    user_content: Union[str, List[Dict[str, Any]]] = text_part
+    if page_images:
+        user_content = [{"type": "text", "text": text_part}]
+        user_content.extend(
+            {"type": "image_url", "image_url": {"url": image["data_url"]}}
+            for image in page_images
+        )
     
     yield from generate_streaming_response(client, model, system_prompt, user_content, temperature, check_stop=check_stop)
 
@@ -148,10 +160,11 @@ def map_reduce_summary(
     language: str = "Same as Document",
     temperature: float = 0.3,
     status_callback=None,
-    check_stop: Optional[Any] = None
+    check_stop: Optional[Any] = None,
+    page_images: Optional[List[Dict[str, Any]]] = None
 ) -> Generator[str, None, None]:
     """
-    Performs Map-Reduce summarization for multi-chunk large PDFs.
+    Performs Map-Reduce summarization for multi-chunk large documents.
     Stage 1: Summarize each chunk into key observations.
     Stage 2: Combine chunk summaries into final formatted report.
     """
@@ -176,7 +189,22 @@ def map_reduce_summary(
         elif language == "English":
             map_prompt += " Write the excerpt summary in English."
 
-        map_user_content = f"Document excerpt ({chunk['page_range']}):\n\n{chunk['text']}"
+        map_text = (
+            f"Document excerpt ({chunk['page_range']}):\n\n{chunk['text']}\n\n"
+            "Also inspect the attached page images for visual information missing from the excerpt."
+        )
+        chunk_page_numbers = set(chunk.get("pages", []))
+        chunk_images = [
+            image for image in (page_images or [])
+            if image["page_num"] in chunk_page_numbers
+        ]
+        map_user_content: Union[str, List[Dict[str, Any]]] = map_text
+        if chunk_images:
+            map_user_content = [{"type": "text", "text": map_text}]
+            map_user_content.extend(
+                {"type": "image_url", "image_url": {"url": image["data_url"]}}
+                for image in chunk_images
+            )
         
         try:
             resp = client.chat.completions.create(
@@ -257,10 +285,10 @@ def chat_stream_response(
         selected_context = document_context[:max_chat_context_chars]
 
     system_prompt = (
-        "You are an AI Document Assistant. Answer the user's questions accurately based ONLY on the provided PDF content.\n"
+        "You are an AI Document Assistant. Answer the user's questions accurately based ONLY on the provided document content.\n"
         "If the answer cannot be found in the document, explicitly state that the document does not contain that information.\n"
         "Always cite relevant page numbers or section details when possible.\n\n"
-        f"--- PDF DOCUMENT CONTENT EXCERPTS ---\n{selected_context}\n--- END DOCUMENT CONTENT ---"
+        f"--- DOCUMENT CONTENT EXCERPTS ---\n{selected_context}\n--- END DOCUMENT CONTENT ---"
     )
     
     messages = [{"role": "system", "content": system_prompt}]
@@ -296,4 +324,3 @@ def chat_stream_response(
             )
         else:
             yield f"\n\n⚠️ **LM Studio Error**: {err_str}"
-

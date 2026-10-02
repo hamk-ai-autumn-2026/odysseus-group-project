@@ -2,8 +2,37 @@ from typing import List, Dict, Any
 import pypdf
 import io
 import math
+import base64
+import pymupdf
+import json
+from pathlib import Path
 
-def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
+
+SUPPORTED_DOCUMENT_EXTENSIONS = ("pdf", "md", "markdown", "txt", "json")
+
+
+def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Dict[str, Any]]:
+    """Render each PDF page as a compressed image for vision-capable LLMs."""
+    document = pymupdf.open(stream=file_bytes, filetype="pdf")
+    images = []
+    try:
+        for page_number, page in enumerate(document, start=1):
+            rect = page.rect
+            scale = min(max_dimension / max(rect.width, rect.height), 2.0)
+            matrix = pymupdf.Matrix(scale, scale)
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            image_bytes = pixmap.tobytes("jpeg", jpg_quality=75)
+            images.append({
+                "page_num": page_number,
+                "data_url": "data:image/jpeg;base64,"
+                + base64.b64encode(image_bytes).decode("ascii"),
+            })
+    finally:
+        document.close()
+    return images
+
+
+def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str, Any]:
     """
     Extracts text, metadata, and statistics from PDF file bytes.
     """
@@ -22,7 +51,8 @@ def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
             "page_num": i + 1,
             "text": clean_text,
             "char_count": len(clean_text),
-            "word_count": len(clean_text.split())
+            "word_count": len(clean_text.split()),
+            "has_image": False,
         })
         if clean_text:
             full_text += f"\n--- Page {i + 1} ---\n" + clean_text
@@ -43,6 +73,11 @@ def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
     # Average reading speed ~ 200 words per min
     est_reading_time = math.ceil(total_words / 200) if total_words > 0 else 0
     
+    page_images = _render_page_images(file_bytes) if include_images else []
+    images_by_page = {image["page_num"]: image for image in page_images}
+    for page in pages_data:
+        page["has_image"] = page["page_num"] in images_by_page
+
     return {
         "pages": pages_data,
         "full_text": full_text.strip(),
@@ -50,7 +85,64 @@ def extract_pdf_data(file_bytes: bytes) -> Dict[str, Any]:
         "total_words": total_words,
         "total_chars": total_chars,
         "est_reading_time": est_reading_time,
-        "metadata": metadata
+        "metadata": metadata,
+        "page_images": page_images,
+    }
+
+
+def extract_document_data(
+    file_bytes: bytes,
+    filename: str,
+    include_images: bool = True,
+) -> Dict[str, Any]:
+    """Extract text and analysis metadata from a supported document format."""
+    extension = Path(filename).suffix.lower().lstrip(".")
+    if extension == "pdf":
+        return extract_pdf_data(file_bytes, include_images=include_images)
+
+    if extension not in SUPPORTED_DOCUMENT_EXTENSIONS:
+        supported = ", ".join(f".{item}" for item in SUPPORTED_DOCUMENT_EXTENSIONS)
+        raise ValueError(f"Unsupported document type '.{extension or 'unknown'}'. Supported types: {supported}.")
+
+    try:
+        text = file_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{filename} is not valid UTF-8 text.") from error
+
+    if extension == "json":
+        try:
+            parsed_json = json.loads(text)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{filename} contains invalid JSON: {error.msg}.") from error
+        text = json.dumps(parsed_json, indent=2, ensure_ascii=False)
+
+    clean_text = text.strip()
+    page = {
+        "page_num": 1,
+        "text": clean_text,
+        "char_count": len(clean_text),
+        "word_count": len(clean_text.split()),
+        "has_image": False,
+    }
+    total_words = page["word_count"]
+    total_chars = page["char_count"]
+
+    return {
+        "pages": [page],
+        "full_text": clean_text,
+        "total_pages": 1,
+        "total_words": total_words,
+        "total_chars": total_chars,
+        "est_reading_time": math.ceil(total_words / 200) if total_words else 0,
+        "metadata": {
+            "title": filename,
+            "author": "N/A",
+            "subject": f"{extension.upper()} document",
+            "creator": "N/A",
+            "producer": "N/A",
+            "creation_date": "N/A",
+        },
+        "page_images": [],
     }
 
 def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap: int = 400) -> List[Dict[str, Any]]:
@@ -67,8 +159,11 @@ def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap:
         page_num = page["page_num"]
         text = page["text"]
         
-        if not text:
+        if not text and not page.get("has_image", False):
             continue
+
+        if not text:
+            text = "[Image-only page. Analyze the attached page image.]"
             
         # Split page into paragraphs or sentences if page text is huge
         paragraphs = text.split("\n\n")

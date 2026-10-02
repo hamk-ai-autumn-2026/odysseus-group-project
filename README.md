@@ -1,6 +1,6 @@
-# DocuMind AI - Local PDF Document Analyzer & Summarizer
+# DocuMind AI - Local Document Analyzer & Summarizer
 
-A fully local, privacy-first PDF document analyzer, summarizer, and interactive Q&A assistant built with **Python (managed by UV)**, **PyPDF**, **LM Studio (OpenAI-compatible local API)**, **pywebview**, and **Streamlit**.
+A fully local, privacy-first document analyzer, summarizer, and interactive Q&A assistant built with **Python (managed by UV)**, **PyPDF**, **LM Studio (OpenAI-compatible local API)**, **pywebview**, and **Streamlit**.
 
 ---
 
@@ -8,14 +8,15 @@ A fully local, privacy-first PDF document analyzer, summarizer, and interactive 
 
 - **100% Local & Private**: No data leaves your machine. Powered by local LLMs via LM Studio.
 - **Standalone Desktop Interface**: Runs in a dedicated native window without opening an external web browser.
-- **Fast PDF Text Extraction**: Uses `pypdf` for fast text parsing, metadata extraction, page indexing, and search.
+- **Multi-format Extraction**: Analyzes PDF, Markdown (`.md`/`.markdown`), plain text (`.txt`), and JSON (`.json`) files. PDFs also support page images for vision-capable local LLMs.
+- **Summary Language Selection**: Choose Same as Document, English, or Finnish for single-pass and map-reduce summaries.
 - **Multi-Preset Summarization**:
   - Executive Summary (Overview, Main Themes, Conclusions)
   - Key Insights & Bullet Points (Top findings with bold callouts)
   - Technical Breakdown (Architectures, formulas, datasets, and numbers)
   - Actionable Takeaways & Next Steps (Strategic recommendations & action items)
   - Custom Prompting (Run arbitrary analysis instructions on document text)
-- **Map-Reduce for Large PDFs**: Automatically chunks long documents and synthesizes section-by-section summaries.
+- **Map-Reduce for Large Documents**: Automatically chunks long documents and synthesizes section-by-section summaries.
 - **Interactive Chat / Q&A**: Ask grounded questions with document context and page-level citations.
 - **In-App PDF Search & Inspection**: Search keywords across pages with snippet previews, view raw page content, and inspect text chunk segmentation.
 - **Modern Glassmorphic UI**: Sleek dark mode styling, real-time response streaming, metric cards, and one-click Markdown/TXT exports.
@@ -25,7 +26,7 @@ A fully local, privacy-first PDF document analyzer, summarizer, and interactive 
 ## Requirements & Stack
 
 - **Package Manager**: [uv](https://docs.astral.sh/uv/) (Fast Python package manager)
-- **PDF Parser**: `pypdf`
+- **Document Parsers**: `pypdf` and `PyMuPDF` for PDFs; Python standard library for Markdown, text, and JSON
 - **Standalone Window Engine**: `pywebview`
 - **LLM Local Server**: [LM Studio](https://lmstudio.ai/)
 - **Frontend Framework**: `streamlit`
@@ -87,6 +88,10 @@ Running with `uv` automatically sets up the venv and syncs dependencies:
 uv sync
 ```
 
+For image analysis, load a vision-capable multimodal model in LM Studio. Text-only
+models can still analyze the extracted PDF text, but they cannot interpret rendered
+page images.
+
 ### 4. Run the Application
 
 #### Standalone Desktop App (Recommended - No Browser Required)
@@ -137,7 +142,7 @@ odysseus-group-project/
 │   ├── __init__.py        # Package initialization
 │   ├── desktop_launcher.py# Standalone native window launcher via pywebview
 │   ├── llm_client.py      # LM Studio OpenAI API client & map-reduce engine
-│   ├── pdf_processor.py   # PyPDF extraction, page analysis, and chunking
+│   ├── pdf_processor.py   # Multi-format extraction, PDF image rendering, and chunking
 │   └── ui.py              # Custom CSS styling, hero banner, and UI components
 └── tests/
     ├── __init__.py        # Test package initialization

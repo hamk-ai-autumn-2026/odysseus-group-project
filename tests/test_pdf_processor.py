@@ -1,7 +1,12 @@
 import io
 import pytest
 from pypdf import PdfWriter, PageObject
-from src.pdf_processor import extract_pdf_data, chunk_pdf_pages, search_in_pages
+from src.pdf_processor import (
+    extract_document_data,
+    extract_pdf_data,
+    chunk_pdf_pages,
+    search_in_pages,
+)
 
 def create_sample_pdf_bytes() -> bytes:
     """Helper to create a 2-page sample PDF in memory with known text."""
@@ -33,6 +38,36 @@ def test_extract_pdf_data_structure():
     assert data["total_pages"] == 2
     assert data["metadata"]["title"] == "Automated Test Document"
     assert data["metadata"]["author"] == "PyTest Suite"
+    assert len(data["page_images"]) == 2
+    assert data["page_images"][0]["data_url"].startswith("data:image/jpeg;base64,")
+    assert all(page["has_image"] for page in data["pages"])
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "expected_text"),
+    [
+        ("notes.txt", b"Plain text\nwith two lines.", "Plain text\nwith two lines."),
+        ("README.md", b"# Heading\n\nMarkdown content.", "# Heading\n\nMarkdown content."),
+        ("data.json", b'{"name": "DocuMind", "items": [1, 2]}', '"name": "DocuMind"'),
+    ],
+)
+def test_extract_document_data_text_formats(filename, content, expected_text):
+    data = extract_document_data(content, filename)
+
+    assert data["total_pages"] == 1
+    assert data["full_text"].find(expected_text) >= 0
+    assert data["page_images"] == []
+    assert data["pages"][0]["has_image"] is False
+
+
+def test_extract_document_data_rejects_invalid_json():
+    with pytest.raises(ValueError, match="invalid JSON"):
+        extract_document_data(b'{"missing": }', "data.json")
+
+
+def test_extract_document_data_rejects_unsupported_extension():
+    with pytest.raises(ValueError, match="Unsupported document type"):
+        extract_document_data(b"content", "data.csv")
 
 def test_chunk_pdf_pages():
     mock_pages = [
