@@ -118,9 +118,31 @@ uv run streamlit run app.py
 
 Run the automated test runner script to verify environment setup, pytest test suite, and module syntax:
 
+### Linux / macOS
 ```bash
 ./scripts/run_checks.sh
 ```
+
+### Windows Command Prompt (CMD)
+```cmd
+scripts\run_checks.bat
+```
+
+### Windows PowerShell
+```powershell
+.\scripts\run_checks.ps1
+```
+
+### Cross-Platform (Any OS)
+```bash
+uv run python scripts/run_checks.py
+```
+*or using pytest directly:*
+```bash
+uv run pytest -v
+```
+
+For full details on unit tests, smoke tests, and edge-case coverage (Unicode, floating point inf/nan, stop signals), see [tests/README.md](tests/README.md).
 
 ---
 
@@ -137,7 +159,10 @@ odysseus-group-project/
 ├── README.md              # Project documentation
 ├── Docs/                  # Sample PDF documents and output reports
 ├── scripts/
-│   └── run_checks.sh      # Sanity check & test execution script
+│   ├── run_checks.sh      # Linux/macOS bash sanity check script
+│   ├── run_checks.bat     # Windows CMD sanity check script
+│   ├── run_checks.ps1     # Windows PowerShell sanity check script
+│   └── run_checks.py      # Cross-platform Python sanity check runner
 ├── src/
 │   ├── __init__.py        # Package initialization
 │   ├── desktop_launcher.py# Standalone native window launcher via pywebview
@@ -146,8 +171,9 @@ odysseus-group-project/
 │   └── ui.py              # Custom CSS styling, hero banner, and UI components
 └── tests/
     ├── __init__.py        # Test package initialization
+    ├── README.md          # Test suite documentation & coverage guide
     ├── test_app_imports.py   # Syntax and import sanity tests
-    ├── test_llm_client.py    # Unit tests for LLM client functions
+    ├── test_llm_client.py    # Unit & smoke tests for LLM client functions
     └── test_pdf_processor.py # Unit tests for PDF parsing and chunking
 ```
 
