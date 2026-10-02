@@ -5,6 +5,13 @@ from src.pdf_processor import (
     chunk_pdf_pages,
     search_in_pages,
 )
+from src.code_analyzer import (
+    detect_language,
+    extract_code_data,
+    chunk_code_lines,
+    search_in_code,
+    analyze_code,
+)
 from src.llm_client import (
     DEFAULT_BASE_URL,
     DEFAULT_API_KEY,
@@ -28,6 +35,11 @@ __all__ = [
     "extract_pdf_data",
     "chunk_pdf_pages",
     "search_in_pages",
+    "detect_language",
+    "extract_code_data",
+    "chunk_code_lines",
+    "search_in_code",
+    "analyze_code",
     "DEFAULT_BASE_URL",
     "DEFAULT_API_KEY",
     "PROMPT_PRESETS",
