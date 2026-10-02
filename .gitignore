@@ -1,0 +1,46 @@
+# Python Virtual Environment (managed by uv)
+.venv/
+venv/
+env/
+ENV/
+
+# Python Bytecode & Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py~
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build & Package Metadata
+*.egg-info/
+*.egg
+build/
+dist/
+
+# Streamlit Local Cache & Config
+.streamlit/secrets.toml
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Output & Temp Files
+*.log
+scratch/
+tmp/
+
+# Other
+Docs/
