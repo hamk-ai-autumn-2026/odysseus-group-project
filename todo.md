@@ -7,10 +7,10 @@
 - [ ] Fix desktop notifications?
 - [ ] Test different type of pdf documents (theses, reports, math tests, etc.)
 - [ ] Test models (Big and small)
-- [ ] Add MD input
-- [ ] Add Docx input?
-- [ ] Add txt input
-- [ ] Add json input
+- [x] Add MD input
+- [x] Add Docx input?
+- [x] Add txt input
+- [x] Add json input
 - [ ] Add csv input
 - [ ] Add any other file types
 - [ ] Add image support
