@@ -183,7 +183,7 @@ def render_hero_header():
                 <div>
                     <div class="hero-title">📄 DocuMind AI</div>
                     <div class="hero-subtitle">
-                        Privacy-first, 100% local Document Analyzer & Summarizer powered by <b>LM Studio</b>, <b>PyPDF</b>, and <b>UV</b>.
+                        Privacy-first, 100% local Document Analyzer & Summarizer powered by <b>LM Studio</b>.
                     </div>
                 </div>
                 <div>
