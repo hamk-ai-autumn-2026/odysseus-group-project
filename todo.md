@@ -26,4 +26,5 @@
 - [x] Add DOCX input support
 - [x] Add MD input support
 - [x] Fix desktop notifications?
+- [x] Implement SQLite database caching & persistence (document extractions, saved summary history, chat history)
 

@@ -18,8 +18,8 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
   - Actionable Takeaways & Next Steps (Strategic recommendations & action items)
   - Custom Prompting (Run arbitrary analysis instructions on document text)
 - **Map-Reduce for Large Documents**: Automatically chunks long documents and synthesizes section-by-section summaries.
-- **Interactive Chat / Q&A**: Ask grounded questions with document context and page-level citations.
-- **In-App PDF Search & Inspection**: Search keywords across pages with snippet previews, view raw page content, and inspect text chunk segmentation.
+- **SQLite Persistence & Instant Caching**: Document extractions, past summary reports, and Q&A chat history are persisted in a local SQLite database (`documind.db`). Re-uploading or selecting a saved document loads instantly from cache.
+- **Recent Documents Library**: Seamlessly switch between previously analyzed documents from the sidebar library.
 - **Modern Glassmorphic UI**: Sleek dark mode styling, real-time response streaming, metric cards, and one-click Markdown/TXT exports.
 
 ---
@@ -176,6 +176,7 @@ odysseus-group-project/
 │   ├── __init__.py        # Package initialization
 │   ├── code_analyzer.py   # Code parsing, detection, chunking, and search for Python/C++
 │   ├── code_reader.py     # Compatibility wrapper for code-analysis entry points
+│   ├── db.py              # SQLite storage layer for caching & session persistence
 │   ├── desktop_launcher.py# Standalone native window launcher via pywebview
 │   ├── llm_client.py      # LM Studio OpenAI API client & map-reduce engine
 │   ├── pdf_processor.py   # Multi-format extraction, PDF image rendering, and chunking
@@ -188,6 +189,7 @@ odysseus-group-project/
     ├── test_llm_client.py    # Unit tests for LLM client functions
     ├── test_pdf_processor.py # Unit tests for PDF and text parsing
     └── test_code_reader.py   # Compatibility checks for the code reader API
+    ├── test_db.py            # Unit tests for SQLite storage layer
 ```
 
 ---

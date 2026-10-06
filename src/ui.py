@@ -1,5 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
+from typing import Optional, Dict, Any, List
 
 def inject_custom_css():
     """
@@ -13,6 +14,13 @@ def inject_custom_css():
         /* Root styling & typography */
         html, body, [class*="css"] {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* Hide default Streamlit sidebar page navigation (app & db options) */
+        [data-testid="stSidebarNav"],
+        [data-testid="stSidebarNavItems"],
+        [data-testid="stSidebarNavSeparator"] {
+            display: none !important;
         }
 
         h1, h2, h3, h4, .stTitle {
@@ -340,5 +348,222 @@ def trigger_browser_notification(title: str, body: str):
     </script>
     """
     components.html(js_code, height=0, width=0)
+
+
+def render_sqlite_db_viewer(db_path: Optional[str] = None):
+    """
+    Renders an interactive SQLite Database Viewer component in Streamlit.
+    """
+    import json
+    import csv
+    import io
+    from src.db import (
+        get_database_stats,
+        get_table_names,
+        get_table_schema,
+        get_table_data,
+        execute_readonly_query,
+        clear_table_records,
+    )
+
+    st.markdown("### 🗄️ SQLite Database Explorer")
+    st.caption("Inspect stored document caches, generated summaries, chat history, and database schema.")
+
+    try:
+        stats = get_database_stats(db_path)
+    except Exception as err:
+        st.error(f"Failed to read SQLite database: {err}")
+        return
+
+    # Top Metrics Header
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Database File Size", stats["file_size_formatted"])
+    with m2:
+        st.metric("Total Tables", stats["total_tables"])
+    with m3:
+        st.metric("Total Records", f"{stats['total_rows']:,}")
+    with m4:
+        st.metric("Journal Mode", stats["journal_mode"])
+
+    st.markdown(f"**Database Location:** `{stats['db_path']}`")
+
+    # DB Viewer Tabs
+    db_tab1, db_tab2, db_tab3 = st.tabs([
+        "📋 Table Explorer",
+        "💻 Read-Only SQL Console",
+        "⚙️ Database Stats & Actions",
+    ])
+
+    # --- TAB 1: TABLE EXPLORER ---
+    with db_tab1:
+        tables = get_table_names(db_path)
+        if not tables:
+            st.info("No user tables found in database.")
+            return
+
+        col_sel, col_srch, col_lim = st.columns([2, 3, 1.5])
+        with col_sel:
+            selected_table = st.selectbox(
+                "Select Table",
+                options=tables,
+                index=0,
+                key="db_viewer_table_select",
+            )
+        with col_srch:
+            search_term = st.text_input(
+                "Filter Rows",
+                placeholder="Search text in table...",
+                key="db_viewer_search_input",
+            )
+        with col_lim:
+            limit_val = st.selectbox(
+                "Rows per Page",
+                options=[10, 25, 50, 100],
+                index=1,
+                key="db_viewer_limit_select",
+            )
+
+        col_names, row_dicts, total_count = get_table_data(
+            table_name=selected_table,
+            limit=limit_val,
+            offset=0,
+            search_query=search_term,
+            db_path=db_path,
+        )
+
+        st.markdown(
+            f"Showing **{len(row_dicts)}** of **{total_count}** matching row(s) in `{selected_table}`"
+        )
+
+        if row_dicts:
+            # Display Table Data Grid
+            st.dataframe(row_dicts, width="stretch")
+
+            # Export Buttons
+            exp_c1, exp_c2 = st.columns(2)
+            with exp_c1:
+                # Generate CSV download
+                csv_buffer = io.StringIO()
+                if row_dicts:
+                    writer = csv.DictWriter(csv_buffer, fieldnames=col_names)
+                    writer.writeheader()
+                    writer.writerows(row_dicts)
+                st.download_button(
+                    label=f"📥 Export `{selected_table}` to CSV",
+                    data=csv_buffer.getvalue(),
+                    file_name=f"{selected_table}_export.csv",
+                    mime="text/csv",
+                    width="stretch",
+                    key=f"dl_csv_{selected_table}",
+                )
+
+            with exp_c2:
+                # Generate JSON download
+                json_data = json.dumps(row_dicts, indent=2, ensure_ascii=False)
+                st.download_button(
+                    label=f"📥 Export `{selected_table}` to JSON",
+                    data=json_data,
+                    file_name=f"{selected_table}_export.json",
+                    mime="application/json",
+                    width="stretch",
+                    key=f"dl_json_{selected_table}",
+                )
+
+            # Record Detail Viewer
+            with st.expander(f"🔍 Inspect Row JSON Details (`{selected_table}`)", expanded=False):
+                row_idx = st.number_input(
+                    "Row Index to Inspect",
+                    min_value=0,
+                    max_value=max(0, len(row_dicts) - 1),
+                    value=0,
+                    step=1,
+                    key="db_viewer_row_idx",
+                )
+                if row_dicts and 0 <= row_idx < len(row_dicts):
+                    st.json(row_dicts[int(row_idx)])
+
+        else:
+            st.warning(f"No records found in table `{selected_table}`.")
+
+        # Table Schema Metadata Expander
+        with st.expander(f"📐 Table Schema & Columns (`{selected_table}`)", expanded=False):
+            schema = get_table_schema(selected_table, db_path)
+            st.dataframe(schema, width="stretch")
+
+    # --- TAB 2: READ-ONLY SQL CONSOLE ---
+    with db_tab2:
+        st.markdown("#### 💻 Execute Custom Read-Only SQL Query")
+        st.caption("Execute SELECT, EXPLAIN, or PRAGMA statements to analyze your data.")
+
+        preset_queries = {
+            "Select All Documents": "SELECT file_hash, file_name, file_size, total_pages, total_words, created_at FROM documents ORDER BY created_at DESC;",
+            "Select Recent Summaries": "SELECT id, file_hash, preset_name, language, model, created_at FROM summaries ORDER BY created_at DESC LIMIT 20;",
+            "Select Recent Chat Messages": "SELECT id, file_hash, role, substr(content, 1, 80) AS snippet, created_at FROM chat_history ORDER BY id DESC LIMIT 20;",
+            "Summary Count by Preset": "SELECT preset_name, COUNT(*) as report_count FROM summaries GROUP BY preset_name ORDER BY report_count DESC;",
+        }
+
+        col_preset, _ = st.columns([3, 1])
+        with col_preset:
+            selected_preset_label = st.selectbox(
+                "Quick Preset Query",
+                options=["-- Custom Query --"] + list(preset_queries.keys()),
+                key="db_sql_preset_select",
+            )
+
+        default_sql = preset_queries.get(
+            selected_preset_label,
+            "SELECT file_name, file_size, total_pages, created_at FROM documents ORDER BY created_at DESC;",
+        )
+
+        user_sql = st.text_area(
+            "SQL Query (SELECT / EXPLAIN / PRAGMA)",
+            value=default_sql,
+            height=110,
+            key="db_viewer_sql_input",
+        )
+
+        if st.button("🚀 Run SQL Query", type="primary", key="btn_run_sql"):
+            if not user_sql.strip():
+                st.warning("Please enter a SQL query.")
+            else:
+                try:
+                    cols, rows = execute_readonly_query(user_sql, db_path=db_path)
+                    st.success(f"Query returned {len(rows)} row(s).")
+                    if rows:
+                        st.dataframe(rows, width="stretch")
+                    else:
+                        st.info("Query executed successfully but returned 0 rows.")
+                except Exception as e:
+                    st.error(f"❌ SQL Execution Error: {str(e)}")
+
+    # --- TAB 3: STATS & ACTIONS ---
+    with db_tab3:
+        st.markdown("#### 📊 Table Record Counts")
+        for tbl, count in stats["table_counts"].items():
+            st.write(f"• Table **`{tbl}`**: `{count}` row(s)")
+
+        st.markdown("---")
+        st.markdown("#### 🗑️ Purge Table Data")
+        st.warning("Warning: Purging a table permanently deletes all its stored records.")
+
+        target_purge_table = st.selectbox(
+            "Select Table to Clear",
+            options=get_table_names(db_path),
+            key="purge_table_select",
+        )
+        confirm_purge = st.checkbox(
+            f"I confirm I want to clear all records from `{target_purge_table}`",
+            key="confirm_purge_checkbox",
+        )
+
+        if st.button(f"🔥 Clear All Records from `{target_purge_table}`", type="secondary", disabled=not confirm_purge):
+            try:
+                clear_table_records(target_purge_table, db_path)
+                st.success(f"Table `{target_purge_table}` cleared successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to clear table: {e}")
+
 
 
