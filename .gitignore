@@ -39,6 +39,9 @@ Thumbs.db
 
 # Output & Temp Files
 *.log
+*.db
+*.sqlite
+*.sqlite3
 scratch/
 tmp/
 

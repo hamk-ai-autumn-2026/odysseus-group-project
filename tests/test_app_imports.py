@@ -8,9 +8,11 @@ def test_app_and_src_imports():
         "src.pdf_processor",
         "src.llm_client",
         "src.ui",
+        "src.db",
         "src.desktop_launcher",
         "main",
-        "app"
+        "app",
+        "pages.db",
     ]
     for mod in modules:
         imported = importlib.import_module(mod)
