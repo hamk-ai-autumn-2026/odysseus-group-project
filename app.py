@@ -45,67 +45,54 @@ if "stop_requested" not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("## ⚙️ LM Studio Connection")
+    st.markdown("## ⚙️ Control Center")
     
-    lm_url = st.text_input("LM Studio Server URL", value=DEFAULT_BASE_URL, help="Default: http://localhost:1234/v1")
-    lm_key = st.text_input("API Key", value=DEFAULT_API_KEY, type="password", help="Leave as default for local LM Studio")
-    
-    col_conn1, col_conn2 = st.columns([1, 1])
-    with col_conn1:
-        test_conn_btn = st.button("🔌 Check Connection", use_container_width=True)
-    with col_conn2:
-        if st.button("🔄 Reload App", use_container_width=True, help="Force reload and refresh the application"):
-            st.rerun()
+    with st.expander("🔌 LM Studio Connection", expanded=True):
+        lm_url = st.text_input("LM Studio Server URL", value=DEFAULT_BASE_URL, help="Default: http://localhost:1234/v1")
+        lm_key = st.text_input("API Key", value=DEFAULT_API_KEY, type="password", help="Leave as default for local LM Studio")
         
-    # Check server status
-    is_connected, status_msg, available_models = check_lm_studio_connection(lm_url, lm_key)
-    
-    if is_connected:
-        st.markdown(
-            f"""
-            <div style="padding: 10px 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 10px; margin: 10px 0;">
-                <span class="badge-pill badge-online">🟢 SERVER ONLINE</span><br/>
-                <small style="color: #cbd5e1; display: inline-block; margin-top: 6px;">{status_msg}</small>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f"""
-            <div style="padding: 10px 14px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); border-radius: 10px; margin: 10px 0;">
-                <span class="badge-pill badge-offline">🔴 SERVER OFFLINE</span><br/>
-                <small style="color: #fca5a5; display: inline-block; margin-top: 6px;">{status_msg}</small>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        col_conn1, col_conn2 = st.columns([1, 1])
+        with col_conn1:
+            test_conn_btn = st.button("🔌 Check Connection", use_container_width=True)
+        with col_conn2:
+            if st.button("🔄 Reload App", use_container_width=True, help="Force reload and refresh the application"):
+                st.rerun()
+            
+        # Check server status
+        is_connected, status_msg, available_models = check_lm_studio_connection(lm_url, lm_key)
         
-    st.markdown("---")
-    st.markdown("### 🤖 Model Selection")
-    
-    if available_models:
-        selected_model = st.selectbox("Active Model", options=available_models, index=0)
-    else:
-        selected_model = st.text_input("Model Name", value="local-model")
-        
-    st.markdown("---")
-    st.markdown("### 🎛️ Processing Settings")
-    
-    temperature = st.slider("Temperature (Creativity)", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
-    max_chunk_chars = st.slider("Chunk Size (Characters)", min_value=1500, max_value=8000, value=3500, step=500, help="Controls size of text chunks for large documents")
-    enable_map_reduce = st.checkbox("Enable Map-Reduce for Large Documents", value=True, help="Splits large documents into chunks and synthesizes them")
-    enable_notifications = st.checkbox("🔔 Desktop Notifications when ready", value=True, help="Triggers system desktop notification when analysis finishes")
-
-    st.markdown("---")
-    st.markdown(
-        """
-        <div style="text-align: center; color: #64748b; font-size: 0.8rem;">
-            Built with <b>UV</b> • <b>PyPDF</b> • <b>LM Studio</b> • <b>Streamlit</b>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        if is_connected:
+            st.markdown(
+                f"""
+                <div style="padding: 10px 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 10px; margin: 10px 0;">
+                    <span class="badge-pill badge-online">🟢 SERVER ONLINE</span><br/>
+                    <small style="color: #cbd5e1; display: inline-block; margin-top: 6px;">{status_msg}</small>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f"""
+                <div style="padding: 10px 14px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); border-radius: 10px; margin: 10px 0;">
+                    <span class="badge-pill badge-offline">🔴 SERVER OFFLINE</span><br/>
+                    <small style="color: #fca5a5; display: inline-block; margin-top: 6px;">{status_msg}</small>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+    with st.expander("🤖 Model Selection", expanded=True):
+        if available_models:
+            selected_model = st.selectbox("Active Model", options=available_models, index=0)
+        else:
+            selected_model = st.text_input("Model Name", value="local-model")
+            
+    with st.expander("🎛️ Processing Settings", expanded=False):
+        temperature = st.slider("Temperature (Creativity)", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
+        max_chunk_chars = st.slider("Chunk Size (Characters)", min_value=1500, max_value=8000, value=3500, step=500, help="Controls size of text chunks for large documents")
+        enable_map_reduce = st.checkbox("Enable Map-Reduce for Large Documents", value=True, help="Splits large documents into chunks and synthesizes them")
+        enable_notifications = st.checkbox("🔔 Desktop Notifications when ready", value=True, help="Triggers system desktop notification when analysis finishes")
 
 # --- MAIN APP LAYOUT ---
 render_hero_header()
@@ -433,5 +420,4 @@ if pdf_data:
 
 else:
     # Empty state prompt
-    st.info("👆 Please upload a PDF, Markdown, TXT, or JSON document using the file uploader above to get started.")
     render_lm_studio_setup_guide(lm_url)
