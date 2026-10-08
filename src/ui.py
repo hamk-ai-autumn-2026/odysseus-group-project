@@ -381,7 +381,6 @@ def render_tts_player(
         else '<span style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.03em;">⏳ NOT SYNTHESIZED</span>'
     )
 
-    st.markdown("---")
     st.markdown(
         f"""
         <div style="
