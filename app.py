@@ -17,6 +17,7 @@ from src.ui import (
     render_metric_cards,
     render_lm_studio_setup_guide,
     trigger_browser_notification,
+    render_tts_player,
 )
 from src.db import (
     init_db,
@@ -414,9 +415,13 @@ if pdf_data:
             else:
                 output_container.info("Select an analysis preset on the left and click **Run Analysis** to generate insights.")
 
-            # Export Options
+            # Export & Audio Options
             if st.session_state.summary_output:
                 st.markdown("---")
+                
+                # Text-to-Speech Player Component
+                render_tts_player(st.session_state.summary_output, language=language_choice)
+
                 st.markdown("##### 📥 Export Report")
                 exp_c1, exp_c2 = st.columns(2)
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -69,10 +69,16 @@ def init_db(db_path: Optional[str] = None) -> None:
                     custom_instruction TEXT DEFAULT '',
                     model TEXT DEFAULT '',
                     summary_text TEXT NOT NULL,
+                    audio_data BLOB,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (file_hash) REFERENCES documents(file_hash) ON DELETE CASCADE
                 );
             """)
+
+            try:
+                conn.execute("ALTER TABLE summaries ADD COLUMN audio_data BLOB;")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
             
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS chat_history (
@@ -242,7 +248,7 @@ def get_summaries_for_document(file_hash: str, db_path: Optional[str] = None) ->
     try:
         rows = conn.execute(
             """
-            SELECT id, file_hash, preset_name, language, custom_instruction, model, summary_text, created_at
+            SELECT id, file_hash, preset_name, language, custom_instruction, model, summary_text, audio_data, created_at
             FROM summaries
             WHERE file_hash = ?
             ORDER BY created_at DESC, id DESC
@@ -250,6 +256,34 @@ def get_summaries_for_document(file_hash: str, db_path: Optional[str] = None) ->
             (file_hash,),
         ).fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def update_summary_audio(summary_id: int, audio_bytes: bytes, db_path: Optional[str] = None) -> None:
+    """Updates stored audio BLOB for a specific summary record."""
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE summaries SET audio_data = ? WHERE id = ?",
+                (audio_bytes, summary_id),
+            )
+    finally:
+        conn.close()
+
+
+def get_summary_audio(summary_id: int, db_path: Optional[str] = None) -> Optional[bytes]:
+    """Retrieves stored audio BLOB bytes for a specific summary record."""
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT audio_data FROM summaries WHERE id = ?",
+            (summary_id,),
+        ).fetchone()
+        return row["audio_data"] if row else None
     finally:
         conn.close()
 
