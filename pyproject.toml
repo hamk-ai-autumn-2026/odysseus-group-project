@@ -13,6 +13,7 @@ dependencies = [
     "pywebview>=6.2.1",
     "qtpy>=2.4.3",
     "streamlit>=1.64.0",
+    "gtts>=2.5.1",
 ]
 
 [project.scripts]

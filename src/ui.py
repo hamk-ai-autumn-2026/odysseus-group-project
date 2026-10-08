@@ -350,6 +350,94 @@ def trigger_browser_notification(title: str, body: str):
     components.html(js_code, height=0, width=0)
 
 
+def render_tts_player(
+    summary_text: str,
+    language: str = "Same as Document",
+    summary_id: Optional[int] = None,
+    existing_audio: Optional[bytes] = None,
+):
+    """
+    Renders an ultra-modern, glassmorphic Text-to-Speech (TTS) audio control panel.
+    Persists audio bytes to SQLite database when synthesized or available.
+    """
+    if not summary_text or not summary_text.strip():
+        return
+
+    import hashlib
+    from src.tts import generate_tts_audio_bytes
+    from src.db import update_summary_audio
+
+    text_hash = hashlib.md5(f"{summary_text}_{language}".encode("utf-8")).hexdigest()
+    tts_key = f"tts_audio_{text_hash}"
+
+    # Auto-load existing audio from SQLite cache if present
+    if tts_key not in st.session_state and existing_audio:
+        st.session_state[tts_key] = existing_audio
+
+    has_audio = tts_key in st.session_state and st.session_state[tts_key] is not None
+    status_badge = (
+        '<span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(52, 211, 153, 0.3); color: #34d399; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.03em;">🟢 AUDIO READY</span>'
+        if has_audio
+        else '<span style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.03em;">⏳ NOT SYNTHESIZED</span>'
+    )
+
+    st.markdown("---")
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(135deg, rgba(30, 27, 75, 0.75) 0%, rgba(15, 23, 42, 0.85) 50%, rgba(49, 46, 129, 0.65) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 16px;
+            padding: 1.4rem 1.6rem;
+            box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        ">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="
+                        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+                        width: 42px; height: 42px; border-radius: 12px;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 1.3rem; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+                    ">🎧</div>
+                    <div>
+                        <div style="font-family: 'Outfit', sans-serif; font-size: 1.15rem; font-weight: 700; color: #f8fafc;">
+                            Audio Summary Voiceover
+                        </div>
+                        <div style="font-size: 0.82rem; color: #94a3b8;">
+                            Synthesize and stream audio report ({language})
+                        </div>
+                    </div>
+                </div>
+                <div>{status_badge}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    c_left, c_right = st.columns([1, 2])
+    with c_left:
+        btn_label = "⚡ Re-synthesize Voiceover" if has_audio else "🔊 Generate Audio Voiceover"
+        if st.button(btn_label, key=f"btn_gen_tts_{text_hash}", width="stretch", type="primary"):
+            with st.spinner("Synthesizing neural audio voiceover..."):
+                try:
+                    audio_bytes = generate_tts_audio_bytes(summary_text, language=language)
+                    st.session_state[tts_key] = audio_bytes
+                    if summary_id:
+                        update_summary_audio(summary_id, audio_bytes)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"⚠️ TTS Generation failed: {e}")
+
+    with c_right:
+        if has_audio:
+            st.audio(st.session_state[tts_key], format="audio/mp3", autoplay=False)
+        else:
+            st.info("Click **Generate Audio Voiceover** to create and play an MP3 summary.", icon="🎧")
+
+
 def render_sqlite_db_viewer(db_path: Optional[str] = None):
     """
     Renders an interactive SQLite Database Viewer component in Streamlit.

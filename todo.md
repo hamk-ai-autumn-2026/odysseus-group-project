@@ -27,4 +27,5 @@
 - [x] Add MD input support
 - [x] Fix desktop notifications?
 - [x] Implement SQLite database caching & persistence (document extractions, saved summary history, chat history)
+- [x] Implement Text-to-Speech (TTS) audio report generation
 
