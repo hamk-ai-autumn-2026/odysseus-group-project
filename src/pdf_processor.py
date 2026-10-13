@@ -6,10 +6,48 @@ import base64
 import pymupdf
 import json
 import csv
+import warnings
+from PIL import Image, UnidentifiedImageError
 from pathlib import Path
 
 
-SUPPORTED_DOCUMENT_EXTENSIONS = ("pdf", "md", "markdown", "txt", "json", "csv")
+SUPPORTED_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
+SUPPORTED_DOCUMENT_EXTENSIONS = ("pdf", "md", "markdown", "txt", "json", "csv") + SUPPORTED_IMAGE_EXTENSIONS
+
+
+def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+    """Validate an image and retain its bytes for multimodal analysis, without OCR."""
+    extension = Path(filename).suffix.lower().lstrip(".")
+    expected_format = {"png": "PNG", "jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP"}[extension]
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(file_bytes)) as image:
+                if image.format != expected_format:
+                    raise ValueError(f"{filename} does not contain a valid {expected_format} image.")
+                image.verify()
+            with Image.open(io.BytesIO(file_bytes)) as image:
+                image.load()
+    except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
+        raise ValueError(f"{filename} is invalid or cannot be safely decoded as an image.") from error
+    mime_type = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}[expected_format]
+    return {
+        "input_type": "image",
+        "pages": [{"page_num": 1, "text": "", "char_count": 0, "word_count": 0, "has_image": True}],
+        "full_text": "",
+        "total_pages": 1,
+        "total_words": 0,
+        "total_chars": 0,
+        "est_reading_time": 0,
+        "metadata": {
+            "title": filename, "author": "N/A", "subject": f"{expected_format} image",
+            "creator": "N/A", "producer": "N/A", "creation_date": "N/A",
+        },
+        "page_images": [{
+            "page_num": 1,
+            "data_url": f"data:{mime_type};base64," + base64.b64encode(file_bytes).decode("ascii"),
+        }],
+    }
 
 
 def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Dict[str, Any]]:
@@ -108,6 +146,8 @@ def extract_document_data(
     extension = Path(filename).suffix.lower().lstrip(".")
     if extension == "pdf":
         return extract_pdf_data(file_bytes, include_images=include_images)
+    if extension in SUPPORTED_IMAGE_EXTENSIONS:
+        return extract_image_data(file_bytes, filename)
 
     if extension not in SUPPORTED_DOCUMENT_EXTENSIONS:
         supported = ", ".join(f".{item}" for item in SUPPORTED_DOCUMENT_EXTENSIONS)

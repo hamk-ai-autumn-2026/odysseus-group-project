@@ -8,6 +8,7 @@ dependencies = [
     "openai>=3.22.1",
     "pypdf>=6.19.0",
     "pymupdf>=1.26.0",
+    "pillow>=12.0.0",
     "pyside6>=6.11.2",
     "pytest>=9.1.1",
     "pywebview>=6.2.1",
