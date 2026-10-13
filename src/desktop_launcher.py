@@ -61,7 +61,7 @@ def launch_standalone_app():
         cmd,
         cwd=root_dir,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE
+        stderr=subprocess.DEVNULL
     )
     
     try:

@@ -109,7 +109,10 @@ def save_document(
     init_db(db_path)
     conn = get_connection(db_path)
     try:
-        data_json = json.dumps(pdf_data, ensure_ascii=False)
+        # Omit large base64 page images from SQLite document cache to avoid database bloat
+        cached_data = {k: v for k, v in pdf_data.items() if k != "page_images"}
+        cached_data["page_images"] = []
+        data_json = json.dumps(cached_data, ensure_ascii=False)
         now = datetime.now().isoformat()
         with conn:
             conn.execute(
@@ -160,6 +163,7 @@ def get_document_by_hash(file_hash: str, db_path: Optional[str] = None) -> Optio
             
         try:
             pdf_data = json.loads(row["extracted_data"])
+            pdf_data.setdefault("page_images", [])
         except Exception:
             return None
             
