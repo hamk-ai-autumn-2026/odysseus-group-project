@@ -3,6 +3,7 @@ import pypdf
 import io
 import math
 import base64
+import re
 import pymupdf
 import json
 import csv
@@ -12,7 +13,23 @@ from pathlib import Path
 
 
 SUPPORTED_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
-SUPPORTED_DOCUMENT_EXTENSIONS = ("pdf", "md", "markdown", "txt", "json", "csv") + SUPPORTED_IMAGE_EXTENSIONS
+SUPPORTED_DOCUMENT_EXTENSIONS = (
+    "pdf", "md", "markdown", "txt", "json", "csv",
+    "py", "pyi", "cpp", "cxx", "cc", "c", "h", "hpp",
+) + SUPPORTED_IMAGE_EXTENSIONS
+
+SUPPORTED_CODE_EXTENSIONS = {
+    "py": "python",
+    "pyi": "python",
+    "python": "python",
+    "cpp": "cpp",
+    "cxx": "cpp",
+    "cc": "cpp",
+    "c": "c",
+    "h": "c",
+    "hpp": "cpp",
+    "hh": "cpp",
+}
 
 
 def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
@@ -137,12 +154,30 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
     }
 
 
+def detect_code_language(filename: str, text: str = "") -> str:
+    """Infer a code language from a filename or source text."""
+    ext = Path(filename).suffix.lower().lstrip(".")
+    if ext in SUPPORTED_CODE_EXTENSIONS:
+        return SUPPORTED_CODE_EXTENSIONS[ext]
+
+    lowered = text.lower()
+    if "def " in lowered and "return " in lowered:
+        return "python"
+    if "int main" in lowered or "std::" in lowered or "#include <iostream>" in lowered:
+        return "cpp"
+    if "public class" in lowered or "using namespace" in lowered:
+        return "cpp"
+    if "class " in lowered and "def " in lowered:
+        return "python"
+    return "text"
+
+
 def extract_document_data(
     file_bytes: bytes,
     filename: str,
     include_images: bool = True,
 ) -> Dict[str, Any]:
-    """Extract text and analysis metadata from a supported document format."""
+    """Extract text and analysis metadata from a supported document or code file."""
     extension = Path(filename).suffix.lower().lstrip(".")
     if extension == "pdf":
         return extract_pdf_data(file_bytes, include_images=include_images)
@@ -187,6 +222,7 @@ def extract_document_data(
             raise ValueError(f"{filename} contains invalid CSV: {error}.") from error
         text = "\n\n".join(parts)
 
+    language = detect_code_language(filename, text) if extension in SUPPORTED_CODE_EXTENSIONS else "text"
     clean_text = text.strip()
     page = {
         "page_num": 1,
@@ -197,24 +233,47 @@ def extract_document_data(
     }
     total_words = page["word_count"]
     total_chars = page["char_count"]
+    metadata = {
+        "title": filename,
+        "author": "N/A",
+        "subject": f"{extension.upper()} document",
+        "creator": "N/A",
+        "producer": "N/A",
+        "creation_date": "N/A",
+    }
 
-    return {
+    result = {
         "pages": [page],
         "full_text": clean_text,
         "total_pages": 1,
         "total_words": total_words,
         "total_chars": total_chars,
         "est_reading_time": math.ceil(total_words / 200) if total_words else 0,
-        "metadata": {
-            "title": filename,
-            "author": "N/A",
-            "subject": f"{extension.upper()} document",
-            "creator": "N/A",
-            "producer": "N/A",
-            "creation_date": "N/A",
-        },
+        "metadata": metadata,
         "page_images": [],
     }
+
+    if language != "text":
+        function_pattern = re.compile(
+            r"^\s*(?:async\s+)?(?:def\s+[A-Za-z_][\w]*|function\s+[A-Za-z_][\w]*|[A-Za-z_][\w*\s&:<>]*\s+[A-Za-z_][\w]*\s*\(.*\))\s*(?::|\{)",
+            re.MULTILINE,
+        )
+        class_pattern = re.compile(r"^\s*(?:class|struct)\s+[A-Za-z_][\w]*", re.MULTILINE)
+        comment_pattern = re.compile(r"^\s*(?:#|//|/\*|\*).*", re.MULTILINE)
+        import_pattern = re.compile(r"^(?:from\s+\w+\s+import\s+.*|import\s+\w+(?:\s*,\s*\w+)*|#include\s*[<\"].*[>\"])", re.MULTILINE)
+
+        result["language"] = language
+        result["metrics"] = {
+            "language": language,
+            "total_lines": len(text.splitlines()),
+            "non_empty_lines": len([line for line in text.splitlines() if line.strip()]),
+            "function_count": len(function_pattern.findall(text)),
+            "class_count": len(class_pattern.findall(text)),
+            "comment_lines": len(comment_pattern.findall(text)),
+            "import_count": len(import_pattern.findall(text)),
+        }
+
+    return result
 
 def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap: int = 400) -> List[Dict[str, Any]]:
     """

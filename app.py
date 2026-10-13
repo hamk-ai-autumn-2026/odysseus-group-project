@@ -184,7 +184,26 @@ render_hero_header()
 # File Uploader Section
 uploaded_file = st.file_uploader(
     "Upload a document to begin analysis",
-    type=["pdf", "md", "markdown", "txt", "json", "csv", "png", "jpg", "jpeg", "webp"],
+    type=[
+        "pdf",
+        "md",
+        "markdown",
+        "txt",
+        "json",
+        "csv",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "py",
+        "pyi",
+        "cpp",
+        "cxx",
+        "cc",
+        "c",
+        "h",
+        "hpp",
+    ],
     key="pdf_uploader",
 )
 

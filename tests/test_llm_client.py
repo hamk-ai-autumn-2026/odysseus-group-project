@@ -17,7 +17,7 @@ import math
 from typing import List, Dict, Any
 from unittest.mock import MagicMock, patch
 import pytest
-
+from types import SimpleNamespace
 from src.llm_client import (
     DEFAULT_BASE_URL,
     DEFAULT_API_KEY,
@@ -35,6 +35,84 @@ from src.llm_client import (
     chat_stream_response,
 )
 
+class FakeStream:
+    def __init__(self, contents):
+        self.chunks = [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content=content)
+                    )
+                ]
+            )
+            for content in contents
+        ]
+        self.closed = False
+
+    def __iter__(self):
+        return iter(self.chunks)
+
+    def close(self):
+        self.closed = True
+
+
+class FakeCompletions:
+    def __init__(self, response):
+        self.response = response
+
+    def create(self, **kwargs):
+        return self.response
+
+
+class FakeClient:
+    def __init__(self, response):
+        self.chat = SimpleNamespace(completions=FakeCompletions(response))
+
+
+def test_generate_streaming_response_closes_when_stopped():
+    response = FakeStream(["first", "second"])
+    stop_checks = iter([False, False, True])
+
+    output = list(generate_streaming_response(
+        client=FakeClient(response),
+        model="dummy",
+        system_prompt="Summarize",
+        user_content="Document",
+        check_stop=lambda: next(stop_checks)
+    ))
+
+    assert output == ["first", "\n\n⏹️ **Analysis stopped by user.**"]
+    assert response.closed is True
+
+
+def test_map_reduce_stops_inside_streamed_chunk():
+    response = FakeStream(["partial", "remaining"])
+    stop_checks = iter([False, False, True, True])
+    chunks = [{"chunk_id": 1, "page_range": "Page 1", "text": "Sample text"}]
+
+    output = list(map_reduce_summary(
+        client=FakeClient(response),
+        model="dummy",
+        chunks=chunks,
+        preset_name="Executive Summary",
+        check_stop=lambda: next(stop_checks)
+    ))
+
+    assert output == ["⏹️ **Map phase stopped by user.**"]
+    assert response.closed is True
+
+def test_prompt_presets_completeness():
+    required_presets = [
+        "Executive Summary",
+        "Key Insights & Bullet Points",
+        "Technical Breakdown",
+        "Actionable Takeaways & Next Steps",
+        "Custom Prompt"
+    ]
+    for preset in required_presets:
+        assert preset in PROMPT_PRESETS
+        assert isinstance(PROMPT_PRESETS[preset], str)
+        assert len(PROMPT_PRESETS[preset]) > 10
 
 @pytest.mark.parametrize("filename", ["report.pdf", "REPORT.PDF"])
 @pytest.mark.parametrize("chunk_count", [1, 2])
@@ -78,7 +156,7 @@ def test_single_pass_without_images_uses_text_only_prompt(mock_stream, page_imag
 def test_map_without_matching_images_uses_text_only_prompt(mock_stream, page_images):
     mock_stream.return_value = iter([])
     client = MagicMock()
-    client.chat.completions.create.return_value.choices[0].message.content = "Map summary"
+    client.chat.completions.create.return_value = FakeStream(["Map summary"])
     chunks = [{"chunk_id": 1, "page_range": "Page 1", "pages": [1], "text": "Document content"}]
     list(map_reduce_summary(client, "test-model", chunks, "Executive Summary", page_images=page_images))
     messages = client.chat.completions.create.call_args.kwargs["messages"]
@@ -91,11 +169,12 @@ def test_map_without_matching_images_uses_text_only_prompt(mock_stream, page_ima
 )
 def test_standalone_image_summary_multimodal_request(preset, instruction):
     client = MagicMock()
-    client.chat.completions.create.return_value = [MagicMock(choices=[MagicMock(delta=MagicMock(content="Image report"))])]
+    client.chat.completions.create.return_value = FakeStream(["Image report"])
     images = [{"page_num": 1, "data_url": "data:image/webp;base64,aW1hZ2U="}]
     result = list(run_image_summary(client, "bonsai-27b", images, preset, instruction, "Finnish", 0.2))
 
     assert result == ["Image report"]
+    assert client.chat.completions.create.return_value.closed
     request = client.chat.completions.create.call_args.kwargs
     assert request["model"] == "bonsai-27b"
     assert request["stream"] is True
@@ -323,7 +402,7 @@ class TestGenerateStreamingResponse:
         chunk1 = MagicMock(choices=[MagicMock(delta=MagicMock(content="Hello "))])
         chunk2 = MagicMock(choices=[MagicMock(delta=MagicMock(content="world!"))])
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = [chunk1, chunk2]
+        mock_client.chat.completions.create.return_value = FakeStream(["Hello ", "world!"])
 
         tokens = list(
             generate_streaming_response(
@@ -344,7 +423,7 @@ class TestGenerateStreamingResponse:
         chunk1 = MagicMock(choices=[MagicMock(delta=MagicMock(content="Part 1"))])
         chunk2 = MagicMock(choices=[MagicMock(delta=MagicMock(content="Part 2"))])
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = [chunk1, chunk2]
+        mock_client.chat.completions.create.return_value = FakeStream(["Part 1", "Part 2"])
 
         stop_flag = False
 
@@ -596,18 +675,15 @@ class TestMapReduceSummary:
         Tests full 2-stage Map-Reduce summarization workflow execution.
         """
         mock_client = MagicMock()
-        mock_map_resp1 = MagicMock(choices=[MagicMock(message=MagicMock(content="Summary Chunk 1"))])
-        mock_map_resp2 = MagicMock(choices=[MagicMock(message=MagicMock(content="Summary Chunk 2"))])
-
-        mock_client.chat.completions.create.side_effect = [mock_map_resp1, mock_map_resp2]
-
-        reduce_chunk = MagicMock(choices=[MagicMock(delta=MagicMock(content="Final Synthesized Report"))])
+        mock_map_resp1 = FakeStream(["Summary ", "Chunk 1"])
+        mock_map_resp2 = FakeStream(["Summary ", "Chunk 2"])
+        reduce_stream = FakeStream(["Final Synthesized Report"])
         
         # In the reduce phase, generate_streaming_response is called which uses client.chat.completions.create
         mock_client.chat.completions.create.side_effect = [
             mock_map_resp1,
             mock_map_resp2,
-            [reduce_chunk],
+            reduce_stream,
         ]
 
         chunks = [
@@ -632,6 +708,12 @@ class TestMapReduceSummary:
         )
 
         assert result_tokens == ["Final Synthesized Report"]
+        calls = mock_client.chat.completions.create.call_args_list
+        assert all(call.kwargs["stream"] for call in calls)
+        reduce_text = calls[-1].kwargs["messages"][1]["content"]
+        assert "Summary Chunk 1" in reduce_text
+        assert "Summary Chunk 2" in reduce_text
+        assert mock_map_resp1.closed and mock_map_resp2.closed and reduce_stream.closed
         assert len(status_messages) == 3
         assert "Processing chunk 1/2" in status_messages[0]
         assert "Processing chunk 2/2" in status_messages[1]
@@ -672,13 +754,13 @@ class TestMapReduceSummary:
         mock_client = MagicMock()
 
         # Chunk 1 raises exception, Chunk 2 succeeds
-        mock_chunk2_resp = MagicMock(choices=[MagicMock(message=MagicMock(content="Chunk 2 Map Summary"))])
-        reduce_chunk = MagicMock(choices=[MagicMock(delta=MagicMock(content="Final Report with Chunk 2"))])
+        mock_chunk2_resp = FakeStream(["Chunk 2 Map Summary"])
+        reduce_stream = FakeStream(["Final Report with Chunk 2"])
 
         mock_client.chat.completions.create.side_effect = [
             RuntimeError("LM Studio chunk 1 timeout"),
             mock_chunk2_resp,
-            [reduce_chunk],
+            reduce_stream,
         ]
 
         chunks = [
@@ -696,18 +778,21 @@ class TestMapReduceSummary:
         )
 
         assert result_tokens == ["Final Report with Chunk 2"]
+        reduce_text = mock_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        assert "Chunk 2 Map Summary" in reduce_text
+        assert "LM Studio chunk 1 timeout" in reduce_text
 
     def test_map_reduce_summary_page_images_filtering(self) -> None:
         """
         Tests that page images are correctly filtered and assigned only to matching chunk pages.
         """
         mock_client = MagicMock()
-        mock_map_resp = MagicMock(choices=[MagicMock(message=MagicMock(content="Map summary"))])
-        reduce_chunk = MagicMock(choices=[MagicMock(delta=MagicMock(content="Final summary"))])
+        mock_map_resp = FakeStream(["Map summary"])
+        reduce_stream = FakeStream(["Final summary"])
 
         mock_client.chat.completions.create.side_effect = [
             mock_map_resp,
-            [reduce_chunk],
+            reduce_stream,
         ]
 
         chunks = [
