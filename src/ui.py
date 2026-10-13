@@ -86,6 +86,7 @@ def inject_custom_css():
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 14px;
             padding: 1.2rem;
+            margin-bottom: 1rem;
             text-align: center;
             transition: all 0.25s ease;
         }
@@ -122,6 +123,7 @@ def inject_custom_css():
         .stTabs [data-baseweb="tab"] {
             border-radius: 10px !important;
             padding: 10px 20px !important;
+            box-sizing: border-box !important;
             font-weight: 600 !important;
             background-color: rgba(30, 41, 59, 0.4) !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -129,7 +131,7 @@ def inject_custom_css():
             transition: all 0.2s ease !important;
         }
 
-        .stTabs [aria-selected="true"] {
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
             background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(56, 189, 248, 0.2) 100%) !important;
             border-color: rgba(139, 92, 246, 0.5) !important;
             color: #f8fafc !important;

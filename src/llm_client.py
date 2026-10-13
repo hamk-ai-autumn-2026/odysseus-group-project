@@ -69,7 +69,12 @@ def generate_streaming_response(
     """
     Streams response text tokens from LM Studio with error handling and stop support.
     """
+    response = None
     try:
+        if check_stop and check_stop():
+            yield "⏹️ **Analysis stopped by user.**"
+            return
+
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -82,8 +87,9 @@ def generate_streaming_response(
         
         for chunk in response:
             if check_stop and check_stop():
+                response.close()
                 yield "\n\n⏹️ **Analysis stopped by user.**"
-                break
+                return
             if chunk.choices and len(chunk.choices) > 0:
                 delta = chunk.choices[0].delta
                 if delta and delta.content:
@@ -100,6 +106,9 @@ def generate_streaming_response(
             )
         else:
             yield f"\n\n⚠️ **LM Studio Error**: {err_str}"
+    finally:
+        if response is not None:
+            response.close()
 
 LANGUAGE_PROMPTS = {
     "Same as Document": "\n\nLanguage requirement: Write your output report in the same primary language as the source document.",
@@ -207,6 +216,9 @@ def map_reduce_summary(
             )
         
         try:
+            if check_stop and check_stop():
+                break
+
             resp = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -214,9 +226,25 @@ def map_reduce_summary(
                     {"role": "user", "content": map_user_content}
                 ],
                 temperature=temperature,
-                stream=False
+                stream=True
             )
-            summary_text = resp.choices[0].message.content or ""
+            summary_parts = []
+            stopped = False
+            try:
+                for response_chunk in resp:
+                    if check_stop and check_stop():
+                        stopped = True
+                        resp.close()
+                        break
+                    if response_chunk.choices and response_chunk.choices[0].delta.content:
+                        summary_parts.append(response_chunk.choices[0].delta.content)
+            finally:
+                resp.close()
+
+            if stopped:
+                break
+
+            summary_text = "".join(summary_parts)
             chunk_summaries.append(f"### Excerpt ({chunk['page_range']}):\n{summary_text}")
         except Exception as e:
             chunk_summaries.append(f"### Excerpt ({chunk['page_range']}):\n(Extraction skipped due to error: {e})")
