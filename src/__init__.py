@@ -27,7 +27,8 @@ from src.ui import (
     render_hero_header,
     render_metric_cards,
     render_lm_studio_setup_guide,
-    trigger_browser_notification
+    trigger_browser_notification,
+    render_sqlite_db_viewer,
 )
 
 __all__ = [
@@ -52,5 +53,7 @@ __all__ = [
     "render_hero_header",
     "render_metric_cards",
     "render_lm_studio_setup_guide",
-    "trigger_browser_notification"
+    "trigger_browser_notification",
+    "render_sqlite_db_viewer",
 ]
+
