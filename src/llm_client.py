@@ -1,5 +1,4 @@
 from typing import List, Dict, Any, Generator, Optional, Tuple, Union
-import openai
 from openai import OpenAI
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
@@ -25,10 +24,19 @@ PROMPT_PRESETS = {
         "You are a strategic advisor. Extract all actionable recommendations, requirements, decisions, and proposed next steps from the document.\n"
         "Categorize them into clear action items."
     ),
+    "Math & Quantitative Analysis": (
+        "You are an expert mathematician and quantitative analyst. Analyze the mathematical concepts, formulas, equations, theorems, problem statements, solutions, and mathematical proofs in this document.\n"
+        "Structure your output using clear Markdown headings and formatted LaTeX math syntax ($ ... $ or $$ ... $$):\n"
+        "1. **Mathematical Overview & Problem Statements**: High-level summary of the mathematical topic, equations, or problems presented.\n"
+        "2. **Key Formulas, Equations & Theorems**: Extract, format, and explain all key mathematical formulas, equations, definitions, or theorems.\n"
+        "3. **Step-by-Step Breakdown & Solutions**: Detailed breakdown of mathematical proofs, solution steps, calculations, or quantitative methodologies.\n"
+        "4. **Summary of Findings & Quantitative Takeaways**: Final summary of mathematical conclusions or numerical results."
+    ),
     "Custom Prompt": (
         "You are a helpful AI assistant reading a document. Answer the user's instructions accurately based strictly on the document text."
     )
 }
+
 
 def get_openai_client(base_url: str = DEFAULT_BASE_URL, api_key: str = DEFAULT_API_KEY) -> OpenAI:
     """

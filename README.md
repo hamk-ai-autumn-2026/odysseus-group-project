@@ -18,8 +18,8 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
   - Actionable Takeaways & Next Steps (Strategic recommendations & action items)
   - Custom Prompting (Run arbitrary analysis instructions on document text)
 - **Map-Reduce for Large Documents**: Automatically chunks long documents and synthesizes section-by-section summaries.
-- **Interactive Chat / Q&A**: Ask grounded questions with document context and page-level citations.
-- **In-App PDF Search & Inspection**: Search keywords across pages with snippet previews, view raw page content, and inspect text chunk segmentation.
+- **SQLite Persistence & Instant Caching**: Document extractions, past summary reports, and Q&A chat history are persisted in a local SQLite database (`documind.db`). Re-uploading or selecting a saved document loads instantly from cache.
+- **Recent Documents Library**: Seamlessly switch between previously analyzed documents from the sidebar library.
 - **Modern Glassmorphic UI**: Sleek dark mode styling, real-time response streaming, metric cards, and one-click Markdown/TXT exports.
 
 ---
@@ -121,9 +121,31 @@ The app accepts source-code files as well as PDFs and text documents, so you can
 
 Run the automated test runner script to verify environment setup, pytest test suite, and module syntax:
 
+### Linux / macOS
 ```bash
 ./scripts/run_checks.sh
 ```
+
+### Windows Command Prompt (CMD)
+```cmd
+scripts\run_checks.bat
+```
+
+### Windows PowerShell
+```powershell
+.\scripts\run_checks.ps1
+```
+
+### Cross-Platform (Any OS)
+```bash
+uv run python scripts/run_checks.py
+```
+*or using pytest directly:*
+```bash
+uv run pytest -v
+```
+
+For full details on unit tests, smoke tests, and edge-case coverage (Unicode, floating point inf/nan, stop signals), see [tests/README.md](tests/README.md).
 
 ---
 
@@ -146,22 +168,28 @@ odysseus-group-project/
 │   ├── test_document.txt
 │   └── test_document.json
 ├── scripts/
-│   └── run_checks.sh      # Sanity check & test execution script
+│   ├── run_checks.sh      # Linux/macOS bash sanity check script
+│   ├── run_checks.bat     # Windows CMD sanity check script
+│   ├── run_checks.ps1     # Windows PowerShell sanity check script
+│   └── run_checks.py      # Cross-platform Python sanity check runner
 ├── src/
 │   ├── __init__.py        # Package initialization
 │   ├── code_analyzer.py   # Code parsing, detection, chunking, and search for Python/C++
 │   ├── code_reader.py     # Compatibility wrapper for code-analysis entry points
+│   ├── db.py              # SQLite storage layer for caching & session persistence
 │   ├── desktop_launcher.py# Standalone native window launcher via pywebview
 │   ├── llm_client.py      # LM Studio OpenAI API client & map-reduce engine
 │   ├── pdf_processor.py   # Multi-format extraction, PDF image rendering, and chunking
 │   └── ui.py              # Custom CSS styling, hero banner, and UI components
 └── tests/
     ├── __init__.py        # Test package initialization
+    ├── README.md          # Test suite documentation & coverage guide
     ├── test_app_imports.py   # Syntax and import sanity tests
     ├── test_code_analyzer.py # Unit tests for Python/C++ code parsing
-    ├── test_llm_client.py    # Unit tests for LLM client functions
-    ├── test_pdf_processor.py # Unit tests for PDF and text parsing
-    └── test_code_reader.py   # Compatibility checks for the code reader API
+    ├── test_code_reader.py   # Compatibility checks for the code reader API
+    ├── test_db.py            # Unit tests for SQLite storage layer
+    ├── test_llm_client.py    # Unit & smoke tests for LLM client functions
+    └── test_pdf_processor.py # Unit tests for PDF and text parsing
 ```
 
 ---
