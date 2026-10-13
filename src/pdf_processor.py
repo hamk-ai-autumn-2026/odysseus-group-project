@@ -112,66 +112,86 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
     """
     Extracts text, metadata, and statistics from PDF file bytes.
     """
-    doc = pymupdf.open(stream=file_bytes, filetype="pdf")
-    total_pages = len(doc)
-    pages_data = []
-    full_text = ""
-    
-    pdf_stream = io.BytesIO(file_bytes)
-    reader = pypdf.PdfReader(pdf_stream)
-    
-    for i, page in enumerate(doc):
-        # Extract text via PyMuPDF (superior handling for math formulas, LaTeX font CMaps, equations & symbols)
-        page_text = page.get_text("text") or ""
-        # Fallback to pypdf if PyMuPDF yields empty string for page
-        if not page_text.strip() and i < len(reader.pages):
-            page_text = reader.pages[i].extract_text() or ""
-            
-        clean_text = page_text.strip()
-        pages_data.append({
-            "page_num": i + 1,
-            "text": clean_text,
-            "char_count": len(clean_text),
-            "word_count": len(clean_text.split()),
-            "has_image": False,
-        })
-        if clean_text:
-            full_text += f"\n--- Page {i + 1} ---\n" + clean_text
-            
-    doc.close()
+    doc = None
+    try:
+        try:
+            doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+        except Exception as error:
+            raise ValueError(f"Could not open or parse PDF file: {error}") from error
 
-            
-    # Extract metadata
-    raw_meta = reader.metadata or {}
-    metadata = {
-        "title": str(raw_meta.get('/Title', 'N/A')),
-        "author": str(raw_meta.get('/Author', 'N/A')),
-        "subject": str(raw_meta.get('/Subject', 'N/A')),
-        "creator": str(raw_meta.get('/Creator', 'N/A')),
-        "producer": str(raw_meta.get('/Producer', 'N/A')),
-        "creation_date": str(raw_meta.get('/CreationDate', 'N/A'))
-    }
-    
-    total_words = sum(p["word_count"] for p in pages_data)
-    total_chars = sum(p["char_count"] for p in pages_data)
-    # Average reading speed ~ 200 words per min
-    est_reading_time = math.ceil(total_words / 200) if total_words > 0 else 0
-    
-    page_images = _render_page_images(file_bytes) if include_images else []
-    images_by_page = {image["page_num"]: image for image in page_images}
-    for page in pages_data:
-        page["has_image"] = page["page_num"] in images_by_page
+        if len(doc) == 0:
+            raise ValueError("The provided PDF file has 0 pages or contains no content.")
 
-    return {
-        "pages": pages_data,
-        "full_text": full_text.strip(),
-        "total_pages": total_pages,
-        "total_words": total_words,
-        "total_chars": total_chars,
-        "est_reading_time": est_reading_time,
-        "metadata": metadata,
-        "page_images": page_images,
-    }
+        total_pages = len(doc)
+        pages_data = []
+        full_text = ""
+
+        try:
+            pdf_stream = io.BytesIO(file_bytes)
+            reader = pypdf.PdfReader(pdf_stream)
+        except Exception:
+            reader = None
+
+        for i, page in enumerate(doc):
+            # Extract text via PyMuPDF (superior handling for math formulas, LaTeX font CMaps, equations & symbols)
+            page_text = page.get_text("text") or ""
+            # Fallback to pypdf if PyMuPDF yields empty string for page
+            if not page_text.strip() and reader and i < len(reader.pages):
+                try:
+                    page_text = reader.pages[i].extract_text() or ""
+                except Exception:
+                    page_text = ""
+
+            clean_text = page_text.strip()
+            pages_data.append({
+                "page_num": i + 1,
+                "text": clean_text,
+                "char_count": len(clean_text),
+                "word_count": len(clean_text.split()),
+                "has_image": False,
+            })
+            if clean_text:
+                full_text += f"\n--- Page {i + 1} ---\n" + clean_text
+
+        # Extract metadata
+        raw_meta = (reader.metadata or {}) if reader else {}
+        metadata = {
+            "title": str(raw_meta.get('/Title') or 'N/A'),
+            "author": str(raw_meta.get('/Author') or 'N/A'),
+            "subject": str(raw_meta.get('/Subject') or 'N/A'),
+            "creator": str(raw_meta.get('/Creator') or 'N/A'),
+            "producer": str(raw_meta.get('/Producer') or 'N/A'),
+            "creation_date": str(raw_meta.get('/CreationDate') or 'N/A')
+        }
+
+        total_words = sum(p["word_count"] for p in pages_data)
+        total_chars = sum(p["char_count"] for p in pages_data)
+        # Average reading speed ~ 200 words per min
+        est_reading_time = math.ceil(total_words / 200) if total_words > 0 else 0
+
+        page_images = []
+        if include_images:
+            try:
+                page_images = _render_page_images(file_bytes)
+            except Exception:
+                page_images = []
+        images_by_page = {image["page_num"]: image for image in page_images}
+        for page in pages_data:
+            page["has_image"] = page["page_num"] in images_by_page
+
+        return {
+            "pages": pages_data,
+            "full_text": full_text.strip(),
+            "total_pages": total_pages,
+            "total_words": total_words,
+            "total_chars": total_chars,
+            "est_reading_time": est_reading_time,
+            "metadata": metadata,
+            "page_images": page_images,
+        }
+    finally:
+        if doc is not None:
+            doc.close()
 
 
 def detect_code_language(filename: str, text: str = "") -> str:

@@ -62,7 +62,7 @@ def test_document_lifecycle(temp_db_path):
         "total_chars": 14,
         "est_reading_time": 1,
         "metadata": {"title": "Test Title", "author": "Tester"},
-        "page_images": [],
+        "page_images": [{"page_num": 1, "data_url": "data:image/jpeg;base64,sample_large_image_bytes"}],
     }
 
     # Verify initially not present
@@ -78,6 +78,7 @@ def test_document_lifecycle(temp_db_path):
     assert doc_record["file_name"] == file_name
     assert doc_record["total_pages"] == 1
     assert doc_record["pdf_data"]["full_text"] == "Test page text"
+    assert doc_record["pdf_data"]["page_images"] == []
 
     # List recent
     recent = list_recent_documents(limit=10, db_path=temp_db_path)
