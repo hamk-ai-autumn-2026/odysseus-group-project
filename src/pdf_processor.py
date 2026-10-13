@@ -287,15 +287,19 @@ def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap:
                 chunk_id += 1
                 
                 # Apply overlap from end of current_chunk_text
-                overlap_text = current_chunk_text[-overlap:] if len(current_chunk_text) > overlap else current_chunk_text
+                if overlap > 0:
+                    overlap_text = current_chunk_text[-overlap:] if len(current_chunk_text) > overlap else current_chunk_text
+                else:
+                    overlap_text = ""
                 overlap_start = len(current_chunk_text) - len(overlap_text)
                 current_page_spans = [
                     (max(start, overlap_start) - overlap_start, end - overlap_start, number)
                     for start, end, number in current_page_spans
                     if end > overlap_start
                 ]
-                current_chunk_text = overlap_text + "\n\n" + para_clean
-                current_page_spans.append((len(overlap_text) + 2, len(current_chunk_text), page_num))
+                paragraph_start = len(overlap_text) + (2 if overlap_text else 0)
+                current_chunk_text = (overlap_text + "\n\n" if overlap_text else "") + para_clean
+                current_page_spans.append((paragraph_start, len(current_chunk_text), page_num))
                 current_pages = {number for _, _, number in current_page_spans}
             else:
                 paragraph_start = len(current_chunk_text) + (2 if current_chunk_text else 0)
