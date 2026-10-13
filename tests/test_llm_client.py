@@ -27,6 +27,8 @@ from src.llm_client import (
     check_lm_studio_connection,
     generate_streaming_response,
     run_single_pass_summary,
+    run_image_summary,
+    ImageAnalysisError,
     map_reduce_summary,
     should_use_map_reduce,
     SINGLE_PASS_MAX_CONTEXT_CHARS,
@@ -81,6 +83,71 @@ def test_map_without_matching_images_uses_text_only_prompt(mock_stream, page_ima
     list(map_reduce_summary(client, "test-model", chunks, "Executive Summary", page_images=page_images))
     messages = client.chat.completions.create.call_args.kwargs["messages"]
     assert messages[1]["content"] == "Document excerpt (Page 1):\n\nDocument content\n\n"
+
+
+@pytest.mark.parametrize(
+    ("preset", "instruction"),
+    [("Executive Summary", "Focus on the chart"), ("Custom Prompt", "Read the labels")],
+)
+def test_standalone_image_summary_multimodal_request(preset, instruction):
+    client = MagicMock()
+    client.chat.completions.create.return_value = [MagicMock(choices=[MagicMock(delta=MagicMock(content="Image report"))])]
+    images = [{"page_num": 1, "data_url": "data:image/webp;base64,aW1hZ2U="}]
+    result = list(run_image_summary(client, "bonsai-27b", images, preset, instruction, "Finnish", 0.2))
+
+    assert result == ["Image report"]
+    request = client.chat.completions.create.call_args.kwargs
+    assert request["model"] == "bonsai-27b"
+    assert request["stream"] is True
+    assert request["temperature"] == 0.2
+    assert instruction in request["messages"][0]["content"]
+    assert "Finnish (Suomi)" in request["messages"][0]["content"]
+    assert "attached image" in request["messages"][0]["content"]
+    content = request["messages"][1]["content"]
+    assert content[0]["type"] == "text"
+    assert "Here is the document text" not in content[0]["text"]
+    assert content[1] == {"type": "image_url", "image_url": {"url": images[0]["data_url"]}}
+
+
+@pytest.mark.parametrize("error", ["Model does not support images", "Missing vision encoder", "Unsupported image_url content"])
+def test_standalone_image_rejection_requires_vision_without_fallback(error):
+    client = MagicMock()
+    client.chat.completions.create.side_effect = RuntimeError(error)
+    images = [{"page_num": 1, "data_url": "data:image/png;base64,aW1hZ2U="}]
+    with pytest.raises(ImageAnalysisError, match="vision-capable model is required") as caught:
+        list(run_image_summary(client, "bonsai-27b", images, "Executive Summary"))
+    assert error in str(caught.value)
+    assert "bonsai-27b" in str(caught.value)
+    client.chat.completions.create.assert_called_once()
+
+
+def test_standalone_image_summary_requires_attachment():
+    client = MagicMock()
+    with pytest.raises(ValueError, match="attached image"):
+        list(run_image_summary(client, "bonsai-27b", [], "Executive Summary"))
+    client.chat.completions.create.assert_not_called()
+
+
+def test_standalone_image_chat_attaches_image_and_history():
+    client = MagicMock()
+    client.chat.completions.create.return_value = [MagicMock(choices=[MagicMock(delta=MagicMock(content="Visible chart"))])]
+    images = [{"page_num": 1, "data_url": "data:image/jpeg;base64,aW1hZ2U="}]
+    history = [{"role": "user", "content": "Describe it"}, {"role": "assistant", "content": "A chart"}]
+    assert list(chat_stream_response(client, "bonsai-27b", "", history, "What are the labels?", page_images=images)) == ["Visible chart"]
+    messages = client.chat.completions.create.call_args.kwargs["messages"]
+    assert messages[1:3] == history
+    assert messages[-1]["content"] == [
+        {"type": "text", "text": "What are the labels?"},
+        {"type": "image_url", "image_url": {"url": images[0]["data_url"]}},
+    ]
+
+
+def test_standalone_image_chat_rejection_has_no_text_fallback():
+    client = MagicMock()
+    client.chat.completions.create.side_effect = RuntimeError("Image input unsupported")
+    with pytest.raises(ImageAnalysisError, match="vision-capable model is required"):
+        list(chat_stream_response(client, "bonsai-27b", "", [], "Describe it", page_images=[{"data_url": "image"}]))
+    client.chat.completions.create.assert_called_once()
 
 
 class TestSmokeLLMClient:

@@ -7,6 +7,18 @@ DEFAULT_API_KEY = "lm-studio"
 SINGLE_PASS_MAX_CONTEXT_CHARS = 12000
 
 
+class ImageAnalysisError(RuntimeError):
+    """A standalone image request failed without a text-only fallback."""
+
+
+def _image_analysis_error(model: str, error: Exception) -> ImageAnalysisError:
+    return ImageAnalysisError(
+        f"LM Studio could not analyze the image with model '{model}'. "
+        "A vision-capable model is required for image input. Load and select a model "
+        f"that supports images in LM Studio, then retry. Server error: {error}"
+    )
+
+
 def should_use_map_reduce(
     filename: str,
     document_text: str,
@@ -88,7 +100,8 @@ def generate_streaming_response(
     system_prompt: str,
     user_content: Union[str, List[Dict[str, Any]]],
     temperature: float = 0.3,
-    check_stop: Optional[Any] = None
+    check_stop: Optional[Any] = None,
+    image_input: bool = False,
 ) -> Generator[str, None, None]:
     """
     Streams response text tokens from LM Studio with error handling and stop support.
@@ -113,6 +126,8 @@ def generate_streaming_response(
                 if delta and delta.content:
                     yield delta.content
     except Exception as e:
+        if image_input:
+            raise _image_analysis_error(model, e) from e
         err_str = str(e)
         if "context length" in err_str.lower() or "n_keep" in err_str.lower() or "tokens" in err_str.lower():
             yield (
@@ -130,6 +145,36 @@ LANGUAGE_PROMPTS = {
     "English": "\n\nLanguage requirement: Write your entire summary report in English regardless of the input document language.",
     "Finnish": "\n\nLanguage requirement: Write your entire summary report in Finnish (Suomi). Kirjoita koko yhteenveto ja raportti suomeksi riippumatta syötekielestä."
 }
+
+
+def run_image_summary(
+    client: OpenAI,
+    model: str,
+    page_images: List[Dict[str, Any]],
+    preset_name: str,
+    custom_instruction: Optional[str] = None,
+    language: str = "Same as Document",
+    temperature: float = 0.3,
+    check_stop: Optional[Any] = None,
+) -> Generator[str, None, None]:
+    """Analyze standalone images using the existing report presets and controls."""
+    if not page_images:
+        raise ValueError("Image analysis requires an attached image.")
+    system_prompt = PROMPT_PRESETS.get(preset_name, PROMPT_PRESETS["Executive Summary"])
+    if custom_instruction and preset_name == "Custom Prompt":
+        system_prompt = f"You are a helpful AI assistant. Analyze the image according to these specific instructions:\n{custom_instruction}"
+    elif custom_instruction:
+        system_prompt += f"\nAdditional Instruction: {custom_instruction}"
+    system_prompt += (
+        "\nThe source is an attached image. Base your report on visible image content, "
+        "including readable text. State when details are unreadable; do not invent them."
+    )
+    system_prompt += LANGUAGE_PROMPTS.get(language, LANGUAGE_PROMPTS["Same as Document"])
+    content = [{"type": "text", "text": "Analyze the attached image using the requested report instructions."}]
+    content.extend({"type": "image_url", "image_url": {"url": image["data_url"]}} for image in page_images)
+    yield from generate_streaming_response(
+        client, model, system_prompt, content, temperature, check_stop=check_stop, image_input=True
+    )
 
 def run_single_pass_summary(
     client: OpenAI,
@@ -279,7 +324,8 @@ def chat_stream_response(
     user_question: str,
     temperature: float = 0.3,
     chunks: Optional[List[Dict[str, Any]]] = None,
-    max_chat_context_chars: int = 10000
+    max_chat_context_chars: int = 10000,
+    page_images: Optional[List[Dict[str, Any]]] = None,
 ) -> Generator[str, None, None]:
     """
     Grounds chat question in document context and streams response with context length safety.
@@ -313,13 +359,22 @@ def chat_stream_response(
         f"--- DOCUMENT CONTENT EXCERPTS ---\n{selected_context}\n--- END DOCUMENT CONTENT ---"
     )
     
+    if page_images:
+        system_prompt = (
+            "You are an AI Image Assistant. Answer based only on the attached image and readable text. "
+            "State when information is absent or unreadable; do not invent details."
+        )
     messages = [{"role": "system", "content": system_prompt}]
     
     # Append recent chat history (up to last 4 messages to save tokens)
     for msg in chat_history[-4:]:
         messages.append({"role": msg["role"], "content": msg["content"]})
         
-    messages.append({"role": "user", "content": user_question})
+    user_content: Union[str, List[Dict[str, Any]]] = user_question
+    if page_images:
+        user_content = [{"type": "text", "text": user_question}]
+        user_content.extend({"type": "image_url", "image_url": {"url": image["data_url"]}} for image in page_images)
+    messages.append({"role": "user", "content": user_content})
     
     try:
         response = client.chat.completions.create(
@@ -335,6 +390,8 @@ def chat_stream_response(
                 if delta and delta.content:
                     yield delta.content
     except Exception as e:
+        if page_images:
+            raise _image_analysis_error(model, e) from e
         err_str = str(e)
         if "context length" in err_str.lower() or "n_keep" in err_str.lower() or "tokens" in err_str.lower():
             yield (

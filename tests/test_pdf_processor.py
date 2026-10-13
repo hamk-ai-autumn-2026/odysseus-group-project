@@ -1,5 +1,7 @@
 import io
 import json
+import base64
+from PIL import Image
 import pytest
 from pypdf import PdfWriter, PageObject
 from src.pdf_processor import (
@@ -64,6 +66,48 @@ def test_extract_document_data_text_formats(filename, content, expected_text):
 def test_extract_document_data_rejects_invalid_json():
     with pytest.raises(ValueError, match="invalid JSON"):
         extract_document_data(b'{"missing": }', "data.json")
+
+
+@pytest.mark.parametrize(
+    ("extension", "image_format", "mime_type"),
+    [("png", "PNG", "image/png"), ("jpg", "JPEG", "image/jpeg"),
+     ("jpeg", "JPEG", "image/jpeg"), ("webp", "WEBP", "image/webp")],
+)
+def test_extract_standalone_image(extension, image_format, mime_type):
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(buffer, format=image_format)
+    image_bytes = buffer.getvalue()
+    data = extract_document_data(image_bytes, f"PHOTO.{extension.upper()}")
+
+    assert data["input_type"] == "image"
+    assert data["full_text"] == data["pages"][0]["text"] == ""
+    assert data["total_words"] == data["total_chars"] == data["est_reading_time"] == 0
+    assert data["total_pages"] == 1
+    assert data["pages"][0]["has_image"] is True
+    image = data["page_images"][0]
+    assert image["page_num"] == 1
+    prefix, payload = image["data_url"].split(",", 1)
+    assert prefix == f"data:{mime_type};base64"
+    assert base64.b64decode(payload) == image_bytes
+    # Its serializable data can use the existing SQLite cache.
+    assert json.loads(json.dumps(data)) == data
+
+
+@pytest.mark.parametrize("extension", ["png", "jpg", "jpeg", "webp"])
+@pytest.mark.parametrize("content", [b"", b"This is plain text, not an image."])
+def test_extract_standalone_image_rejects_invalid_bytes(extension, content):
+    with pytest.raises(ValueError, match="invalid.*image"):
+        extract_document_data(content, f"photo.{extension}")
+
+
+def test_extract_standalone_image_rejects_mislabeled_and_truncated_files():
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(buffer, format="PNG")
+    image_bytes = buffer.getvalue()
+    with pytest.raises(ValueError, match="valid JPEG"):
+        extract_document_data(image_bytes, "photo.jpg")
+    with pytest.raises(ValueError):
+        extract_document_data(image_bytes[:40], "photo.png")
 
 
 def test_extract_document_data_rejects_unsupported_extension():

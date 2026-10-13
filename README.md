@@ -10,6 +10,7 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
 - **Standalone Desktop Interface**: Runs in a dedicated native window without opening an external web browser.
 - **Multi-format Extraction**: Analyzes PDF, Markdown (`.md`/`.markdown`), plain text (`.txt`), JSON (`.json`), and CSV (`.csv`) files. PDFs also support page images for vision-capable local LLMs.
 - **CSV Analysis & Q&A**: Upload UTF-8 comma-separated files (an optional BOM is supported). The first record supplies column names; numbered rows preserve each column/value pair as text, including quoted commas, multiline values, empty cells, and leading zeros. Blank lines are skipped; malformed quoting and inconsistent row lengths are rejected. Header-only files are accepted. CSV uses the existing text summarization and document chat pipeline.
+- **Standalone Image Analysis & Q&A**: Upload PNG (`.png`), JPEG (`.jpg`/`.jpeg`), or WebP (`.webp`) images. Use the existing analysis presets, custom instructions, output language, report exports, and chat. Images are validated and sent to the selected LM Studio model as image input; they are not decoded as document text or processed with local OCR.
 - **Summary Language Selection**: Choose Same as Document, English, or Finnish for single-pass and map-reduce summaries.
 - **Multi-Preset Summarization**:
   - Executive Summary (Overview, Main Themes, Conclusions)
@@ -28,6 +29,7 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
 
 - **Package Manager**: [uv](https://docs.astral.sh/uv/) (Fast Python package manager)
 - **Document Parsers**: `pypdf` and `PyMuPDF` for PDFs; Python standard library for Markdown, text, JSON, and CSV
+- **Image Validation**: `Pillow` for standalone PNG, JPEG, and WebP uploads
 - **Standalone Window Engine**: `pywebview`
 - **LLM Local Server**: [LM Studio](https://lmstudio.ai/)
 - **Frontend Framework**: `streamlit`
@@ -92,6 +94,13 @@ uv sync
 For image analysis, load a vision-capable multimodal model in LM Studio. Text-only
 models can still analyze the extracted PDF text, but they cannot interpret rendered
 page images.
+
+Standalone image analysis and image Q&A require a **vision-capable model** loaded
+in LM Studio. Selecting a model such as `bonsai-27b` does not establish that it
+supports vision. If the selected model or server rejects image input, the app
+shows a clear vision-model requirement and the server error, without retrying a
+text-only analysis. Image uploads have zero extracted text words until the model
+analyzes the image; the Page Viewer displays the uploaded image.
 
 ### 4. Run the Application
 
