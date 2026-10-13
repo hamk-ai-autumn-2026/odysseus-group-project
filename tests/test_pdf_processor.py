@@ -1,4 +1,5 @@
 import io
+import json
 import pytest
 from pypdf import PdfWriter, PageObject
 from src.pdf_processor import (
@@ -67,7 +68,63 @@ def test_extract_document_data_rejects_invalid_json():
 
 def test_extract_document_data_rejects_unsupported_extension():
     with pytest.raises(ValueError, match="Unsupported document type"):
-        extract_document_data(b"content", "data.csv")
+        extract_document_data(b"content", "data.xml")
+
+
+def test_extract_csv_preserves_headers_values_and_text_pipeline():
+    content = '\ufeffName,Code,Notes,Empty\r\n"Mäki, Anna",001,"First line\r\nSecond ""quoted"" line",\r\n\r\nBob,002,=SUM(A1:A2),\r\n'
+    data = extract_document_data(content.encode("utf-8"), "DATA.CSV")
+    parts = data["full_text"].split("\n\n")
+
+    assert json.loads(parts[0].removeprefix("Columns: ")) == ["Name", "Code", "Notes", "Empty"]
+    assert json.loads(parts[1].removeprefix("Row 1: ")) == [
+        {"column": "Name", "value": "Mäki, Anna"},
+        {"column": "Code", "value": "001"},
+        {"column": "Notes", "value": 'First line\r\nSecond "quoted" line'},
+        {"column": "Empty", "value": ""},
+    ]
+    assert json.loads(parts[2].removeprefix("Row 2: "))[2]["value"] == "=SUM(A1:A2)"
+    assert data["total_pages"] == 1
+    assert data["pages"][0]["text"] == data["full_text"]
+    assert data["total_chars"] == len(data["full_text"])
+    assert data["total_words"] == len(data["full_text"].split())
+    assert data["metadata"]["subject"] == "CSV document"
+    assert data["page_images"] == []
+    assert data["pages"][0]["has_image"] is False
+    assert chunk_pdf_pages(data["pages"])[0]["text"] == data["full_text"]
+    assert search_in_pages(data["pages"], "001")
+
+
+def test_extract_csv_preserves_duplicate_and_empty_column_names():
+    data = extract_document_data(b"Name,Name,\na,b,c\n", "data.csv")
+    row = json.loads(data["full_text"].split("\n\n")[1].removeprefix("Row 1: "))
+    assert row == [
+        {"column": "Name", "value": "a"},
+        {"column": "Name", "value": "b"},
+        {"column": "", "value": "c"},
+    ]
+
+
+def test_extract_csv_header_only():
+    data = extract_document_data(b"Name,Age\n", "data.csv")
+    assert data["full_text"] == 'Columns: ["Name", "Age"]'
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        (b"", "no CSV header"),
+        (b"\n\r\n", "no CSV header"),
+        (b'Name,Age\n"unfinished,20', "invalid CSV"),
+        (b'Name\n"value"junk\n', "invalid CSV"),
+        (b"Name,Age\nAlice\n", "expected 2 columns"),
+        (b"Name,Age\nAlice,20,extra\n", "expected 2 columns"),
+        (b"Name\n\xff", "not valid UTF-8"),
+    ],
+)
+def test_extract_csv_rejects_invalid_input(content, message):
+    with pytest.raises(ValueError, match=message):
+        extract_document_data(content, "data.csv")
 
 def test_chunk_pdf_pages():
     mock_pages = [
@@ -91,6 +148,28 @@ def test_chunk_pdf_pages():
     assert "chunk_id" in chunks[0]
     assert "page_range" in chunks[0]
     assert "text" in chunks[0]
+
+@pytest.mark.parametrize(
+    ("overlap", "expected_pages", "expected_range"),
+    [(5, [2, 3], "Pages 2-3"), (15, [1, 2, 3], "Pages 1-3")],
+)
+def test_chunk_pdf_pages_preserves_overlap_page_metadata(overlap, expected_pages, expected_range):
+    pages = [
+        {"page_num": 1, "text": "AAAAAAAAAA"},
+        {"page_num": 2, "text": "BBBBBBBBBB"},
+        {"page_num": 3, "text": "CCCCCCCCCC"},
+        {"page_num": 4, "text": "DDDDDDDDDD"},
+    ]
+
+    chunks = chunk_pdf_pages(pages, max_chars=25, overlap=overlap)
+
+    assert chunks[0]["pages"] == [1, 2]
+    assert chunks[1]["text"] == chunks[0]["text"][-overlap:] + "\n\n" + pages[2]["text"]
+    assert chunks[1]["pages"] == expected_pages
+    assert chunks[1]["page_range"] == expected_range
+    # A later overlap must drop pages whose text no longer survives.
+    assert chunks[2]["pages"] == ([3, 4] if overlap == 5 else [2, 3, 4])
+
 
 def test_search_in_pages():
     mock_pages = [
