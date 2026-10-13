@@ -171,6 +171,24 @@ def test_chunk_pdf_pages_preserves_overlap_page_metadata(overlap, expected_pages
     assert chunks[2]["pages"] == ([3, 4] if overlap == 5 else [2, 3, 4])
 
 
+def test_chunk_pdf_pages_zero_overlap():
+    pages = [
+        {"page_num": 1, "text": "Paragraph A\n\nParagraph B"},
+        {"page_num": 2, "text": "Paragraph C"},
+    ]
+    chunks = chunk_pdf_pages(pages, max_chars=15, overlap=0)
+    assert len(chunks) == 3
+    assert chunks[0]["text"] == "Paragraph A"
+    assert chunks[1]["text"] == "Paragraph B"
+    assert chunks[2]["text"] == "Paragraph C"
+    assert chunks[0]["pages"] == [1]
+    assert chunks[1]["pages"] == [1]
+    assert chunks[2]["pages"] == [2]
+    assert chunks[0]["page_range"] == "Page 1"
+    assert chunks[1]["page_range"] == "Page 1"
+    assert chunks[2]["page_range"] == "Page 2"
+
+
 def test_search_in_pages():
     mock_pages = [
         {"page_num": 1, "text": "The quick brown fox jumps over the lazy dog."},
