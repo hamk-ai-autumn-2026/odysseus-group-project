@@ -6,24 +6,17 @@ import base64
 import re
 import pymupdf
 import json
+import csv
+import warnings
+from PIL import Image, UnidentifiedImageError
 from pathlib import Path
 
 
+SUPPORTED_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 SUPPORTED_DOCUMENT_EXTENSIONS = (
-    "pdf",
-    "md",
-    "markdown",
-    "txt",
-    "json",
-    "py",
-    "pyi",
-    "cpp",
-    "cxx",
-    "cc",
-    "c",
-    "h",
-    "hpp",
-)
+    "pdf", "md", "markdown", "txt", "json", "csv",
+    "py", "pyi", "cpp", "cxx", "cc", "c", "h", "hpp",
+) + SUPPORTED_IMAGE_EXTENSIONS
 
 SUPPORTED_CODE_EXTENSIONS = {
     "py": "python",
@@ -37,6 +30,41 @@ SUPPORTED_CODE_EXTENSIONS = {
     "hpp": "cpp",
     "hh": "cpp",
 }
+
+
+def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+    """Validate an image and retain its bytes for multimodal analysis, without OCR."""
+    extension = Path(filename).suffix.lower().lstrip(".")
+    expected_format = {"png": "PNG", "jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP"}[extension]
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(file_bytes)) as image:
+                if image.format != expected_format:
+                    raise ValueError(f"{filename} does not contain a valid {expected_format} image.")
+                image.verify()
+            with Image.open(io.BytesIO(file_bytes)) as image:
+                image.load()
+    except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
+        raise ValueError(f"{filename} is invalid or cannot be safely decoded as an image.") from error
+    mime_type = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}[expected_format]
+    return {
+        "input_type": "image",
+        "pages": [{"page_num": 1, "text": "", "char_count": 0, "word_count": 0, "has_image": True}],
+        "full_text": "",
+        "total_pages": 1,
+        "total_words": 0,
+        "total_chars": 0,
+        "est_reading_time": 0,
+        "metadata": {
+            "title": filename, "author": "N/A", "subject": f"{expected_format} image",
+            "creator": "N/A", "producer": "N/A", "creation_date": "N/A",
+        },
+        "page_images": [{
+            "page_num": 1,
+            "data_url": f"data:{mime_type};base64," + base64.b64encode(file_bytes).decode("ascii"),
+        }],
+    }
 
 
 def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Dict[str, Any]]:
@@ -153,6 +181,8 @@ def extract_document_data(
     extension = Path(filename).suffix.lower().lstrip(".")
     if extension == "pdf":
         return extract_pdf_data(file_bytes, include_images=include_images)
+    if extension in SUPPORTED_IMAGE_EXTENSIONS:
+        return extract_image_data(file_bytes, filename)
 
     if extension not in SUPPORTED_DOCUMENT_EXTENSIONS:
         supported = ", ".join(f".{item}" for item in SUPPORTED_DOCUMENT_EXTENSIONS)
@@ -169,6 +199,28 @@ def extract_document_data(
         except json.JSONDecodeError as error:
             raise ValueError(f"{filename} contains invalid JSON: {error.msg}.") from error
         text = json.dumps(parsed_json, indent=2, ensure_ascii=False)
+    elif extension == "csv":
+        try:
+            rows = csv.reader(io.StringIO(text, newline=""), strict=True)
+            columns = next((row for row in rows if row), None)
+            if columns is None:
+                raise ValueError(f"{filename} contains no CSV header.")
+            parts = ["Columns: " + json.dumps(columns, ensure_ascii=False)]
+            row_number = 0
+            for row in rows:
+                if not row:
+                    continue
+                row_number += 1
+                if len(row) != len(columns):
+                    raise ValueError(
+                        f"{filename} CSV row {row_number} has {len(row)} values; "
+                        f"expected {len(columns)} columns."
+                    )
+                cells = [{"column": column, "value": value} for column, value in zip(columns, row)]
+                parts.append(f"Row {row_number}: " + json.dumps(cells, ensure_ascii=False))
+        except csv.Error as error:
+            raise ValueError(f"{filename} contains invalid CSV: {error}.") from error
+        text = "\n\n".join(parts)
 
     language = detect_code_language(filename, text) if extension in SUPPORTED_CODE_EXTENSIONS else "text"
     clean_text = text.strip()
@@ -231,6 +283,7 @@ def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap:
     chunks = []
     current_chunk_text = ""
     current_pages = set()
+    current_page_spans = []
     chunk_id = 1
     
     for page in pages:
@@ -263,11 +316,24 @@ def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap:
                 chunk_id += 1
                 
                 # Apply overlap from end of current_chunk_text
-                overlap_text = current_chunk_text[-overlap:] if len(current_chunk_text) > overlap else current_chunk_text
-                current_chunk_text = overlap_text + "\n\n" + para_clean
-                current_pages = {page_num}
+                if overlap > 0:
+                    overlap_text = current_chunk_text[-overlap:] if len(current_chunk_text) > overlap else current_chunk_text
+                else:
+                    overlap_text = ""
+                overlap_start = len(current_chunk_text) - len(overlap_text)
+                current_page_spans = [
+                    (max(start, overlap_start) - overlap_start, end - overlap_start, number)
+                    for start, end, number in current_page_spans
+                    if end > overlap_start
+                ]
+                paragraph_start = len(overlap_text) + (2 if overlap_text else 0)
+                current_chunk_text = (overlap_text + "\n\n" if overlap_text else "") + para_clean
+                current_page_spans.append((paragraph_start, len(current_chunk_text), page_num))
+                current_pages = {number for _, _, number in current_page_spans}
             else:
+                paragraph_start = len(current_chunk_text) + (2 if current_chunk_text else 0)
                 current_chunk_text += ("\n\n" if current_chunk_text else "") + para_clean
+                current_page_spans.append((paragraph_start, len(current_chunk_text), page_num))
                 current_pages.add(page_num)
                 
     # Append final chunk if exists

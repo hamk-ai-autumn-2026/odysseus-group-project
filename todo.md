@@ -6,14 +6,14 @@
 - [ ] Consider scope of the project
 - [ ] Test different type of pdf documents (theses, reports, math tests, etc.)
 - [ ] Test models (Big and small)
-- [ ] Add csv input
 - [ ] Add any other file types
-- [ ] Add image support
 
 ---
 
 ## ✅ Completed Tasks
 
+- [x] Add image support (PNG, JPG/JPEG, WebP analysis and Q&A with vision-model errors and tests)
+- [x] Add CSV input with column/value preservation, summarization, Q&A, and parsing tests
 - [x] Test through README and instructions on the app
 - [x] Reload app button (for pywebview)
 - [x] Language options (default, english, finnish)
