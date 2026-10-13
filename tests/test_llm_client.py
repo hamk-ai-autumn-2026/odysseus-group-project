@@ -17,7 +17,7 @@ import math
 from typing import List, Dict, Any
 from unittest.mock import MagicMock, patch
 import pytest
-
+from types import SimpleNamespace
 from src.llm_client import (
     DEFAULT_BASE_URL,
     DEFAULT_API_KEY,
@@ -140,6 +140,86 @@ def test_standalone_image_chat_attaches_image_and_history():
         {"type": "text", "text": "What are the labels?"},
         {"type": "image_url", "image_url": {"url": images[0]["data_url"]}},
     ]
+
+
+class FakeStream:
+    def __init__(self, contents):
+        self.chunks = [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content=content)
+                    )
+                ]
+            )
+            for content in contents
+        ]
+        self.closed = False
+
+    def __iter__(self):
+        return iter(self.chunks)
+
+    def close(self):
+        self.closed = True
+
+
+class FakeCompletions:
+    def __init__(self, response):
+        self.response = response
+
+    def create(self, **kwargs):
+        return self.response
+
+
+class FakeClient:
+    def __init__(self, response):
+        self.chat = SimpleNamespace(completions=FakeCompletions(response))
+
+
+def test_generate_streaming_response_closes_when_stopped():
+    response = FakeStream(["first", "second"])
+    stop_checks = iter([False, False, True])
+
+    output = list(generate_streaming_response(
+        client=FakeClient(response),
+        model="dummy",
+        system_prompt="Summarize",
+        user_content="Document",
+        check_stop=lambda: next(stop_checks)
+    ))
+
+    assert output == ["first", "\n\n⏹️ **Analysis stopped by user.**"]
+    assert response.closed is True
+
+
+def test_map_reduce_stops_inside_streamed_chunk():
+    response = FakeStream(["partial", "remaining"])
+    stop_checks = iter([False, False, True, True])
+    chunks = [{"chunk_id": 1, "page_range": "Page 1", "text": "Sample text"}]
+
+    output = list(map_reduce_summary(
+        client=FakeClient(response),
+        model="dummy",
+        chunks=chunks,
+        preset_name="Executive Summary",
+        check_stop=lambda: next(stop_checks)
+    ))
+
+    assert output == ["⏹️ **Map phase stopped by user.**"]
+    assert response.closed is True
+
+def test_prompt_presets_completeness():
+    required_presets = [
+        "Executive Summary",
+        "Key Insights & Bullet Points",
+        "Technical Breakdown",
+        "Actionable Takeaways & Next Steps",
+        "Custom Prompt"
+    ]
+    for preset in required_presets:
+        assert preset in PROMPT_PRESETS
+        assert isinstance(PROMPT_PRESETS[preset], str)
+        assert len(PROMPT_PRESETS[preset]) > 10
 
 
 def test_standalone_image_chat_rejection_has_no_text_fallback():
