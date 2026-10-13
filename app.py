@@ -1,5 +1,6 @@
 import streamlit as st
 import datetime
+import base64
 from src.pdf_processor import extract_document_data, chunk_pdf_pages, search_in_pages
 from src.llm_client import (
     DEFAULT_BASE_URL,
@@ -8,6 +9,8 @@ from src.llm_client import (
     get_openai_client,
     check_lm_studio_connection,
     run_single_pass_summary,
+    run_image_summary,
+    ImageAnalysisError,
     map_reduce_summary,
     should_use_map_reduce,
     chat_stream_response,
@@ -195,6 +198,11 @@ uploaded_file = st.file_uploader(
         "c",
         "h",
         "hpp",
+        "csv",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
     ],
     key="pdf_uploader",
 )
@@ -241,6 +249,9 @@ if uploaded_file is not None:
 pdf_data = st.session_state.pdf_data
 
 if pdf_data:
+    is_standalone_image = pdf_data.get("input_type") == "image"
+    if is_standalone_image:
+        st.info("Image analysis requires a vision-capable model in LM Studio. Model names alone do not confirm image support.")
     cache_badge = (
         '<span style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(96, 165, 250, 0.4); color: #93c5fd; padding: 3px 8px; border-radius: 6px; font-size: 0.8rem; margin-left: 10px;">⚡ SQLite Cached</span>'
         if st.session_state.from_cache
@@ -362,10 +373,24 @@ if pdf_data:
                     full_text = pdf_data["full_text"]
 
                     # Prepare Chunks
-                    chunks = chunk_pdf_pages(pdf_data["pages"], max_chars=max_chunk_chars)
+                    chunks = [] if is_standalone_image else chunk_pdf_pages(pdf_data["pages"], max_chars=max_chunk_chars)
 
                     try:
-                        if should_use_map_reduce(
+                        if is_standalone_image:
+                            st.session_state.summary_output = ""
+                            with st.spinner("Analyzing image with the selected LM Studio model..."):
+                                generator = run_image_summary(
+                                    client=client,
+                                    model=selected_model,
+                                    page_images=pdf_data["page_images"],
+                                    preset_name=preset_choice,
+                                    custom_instruction=custom_instruction,
+                                    language=language_choice,
+                                    temperature=temperature,
+                                    check_stop=lambda: st.session_state.get("stop_requested", False),
+                                )
+                                st.session_state.summary_output = output_container.write_stream(generator)
+                        elif should_use_map_reduce(
                             st.session_state.file_name, full_text, len(chunks), enable_map_reduce
                         ):
                             status_box = st.status(f"Processing multi-page document across {len(chunks)} chunks...", expanded=True)
@@ -513,7 +538,7 @@ if pdf_data:
                 # Generate Assistant Response
                 with st.chat_message("assistant"):
                     client = get_openai_client(lm_url, lm_key)
-                    doc_chunks = chunk_pdf_pages(pdf_data["pages"], max_chars=max_chunk_chars)
+                    doc_chunks = [] if is_standalone_image else chunk_pdf_pages(pdf_data["pages"], max_chars=max_chunk_chars)
                     generator = chat_stream_response(
                         client=client,
                         model=selected_model,
@@ -522,11 +547,16 @@ if pdf_data:
                         user_question=user_query,
                         temperature=temperature,
                         chunks=doc_chunks,
+                        page_images=pdf_data["page_images"] if is_standalone_image else None,
                     )
-                    assistant_response = st.write_stream(generator)
-                    st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
-                    if st.session_state.file_hash:
-                        save_chat_message(st.session_state.file_hash, "assistant", assistant_response)
+                    try:
+                        assistant_response = st.write_stream(generator)
+                    except ImageAnalysisError as error:
+                        st.error(str(error))
+                    else:
+                        st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
+                        if st.session_state.file_hash:
+                            save_chat_message(st.session_state.file_hash, "assistant", assistant_response)
 
     # --- TAB 3: INSPECTION & SEARCH ---
     with tab_inspect:
@@ -559,6 +589,9 @@ if pdf_data:
             page_obj = next(p for p in pdf_data["pages"] if p["page_num"] == selected_page_num)
 
             st.markdown(f"#### Page {selected_page_num} ({page_obj['word_count']} words, {page_obj['char_count']} chars)")
+            if is_standalone_image:
+                image_url = pdf_data["page_images"][0]["data_url"]
+                st.image(base64.b64decode(image_url.split(",", 1)[1]))
             st.text_area("Page Text Content", value=page_obj["text"], height=400, key=f"page_text_{selected_page_num}")
 
         with insp_tab3:
