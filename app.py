@@ -9,6 +9,7 @@ from src.llm_client import (
     check_lm_studio_connection,
     run_single_pass_summary,
     map_reduce_summary,
+    should_use_map_reduce,
     chat_stream_response,
 )
 from src.ui import (
@@ -364,7 +365,9 @@ if pdf_data:
                     chunks = chunk_pdf_pages(pdf_data["pages"], max_chars=max_chunk_chars)
 
                     try:
-                        if len(chunks) > 1 and enable_map_reduce:
+                        if should_use_map_reduce(
+                            st.session_state.file_name, full_text, len(chunks), enable_map_reduce
+                        ):
                             status_box = st.status(f"Processing multi-page document across {len(chunks)} chunks...", expanded=True)
 
                             def update_status(msg):

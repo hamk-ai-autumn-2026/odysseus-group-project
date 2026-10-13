@@ -10,6 +10,8 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
 - **Standalone Desktop Interface**: Runs in a dedicated native window without opening an external web browser.
 - **Multi-format Extraction**: Analyzes PDF, Markdown (`.md`/`.markdown`), plain text (`.txt`), JSON (`.json`), Python (`.py`/`.pyi`), and C++/C source files (`.cpp`, `.cc`, `.cxx`, `.c`, `.h`, `.hpp`). PDFs also support page images for vision-capable local LLMs.
 - **Code Reader / Analyzer**: Detects Python and C++ source structure, counts functions/classes/imports, chunks code by line ranges, and supports keyword search across source files.
+- **Multi-format Extraction**: Analyzes PDF, Markdown (`.md`/`.markdown`), plain text (`.txt`), JSON (`.json`), and CSV (`.csv`) files. PDFs also support page images for vision-capable local LLMs.
+- **CSV Analysis & Q&A**: Upload UTF-8 comma-separated files (an optional BOM is supported). The first record supplies column names; numbered rows preserve each column/value pair as text, including quoted commas, multiline values, empty cells, and leading zeros. Blank lines are skipped; malformed quoting and inconsistent row lengths are rejected. Header-only files are accepted. CSV uses the existing text summarization and document chat pipeline.
 - **Summary Language Selection**: Choose Same as Document, English, or Finnish for single-pass and map-reduce summaries.
 - **Multi-Preset Summarization**:
   - Executive Summary (Overview, Main Themes, Conclusions)
@@ -28,6 +30,7 @@ A fully local, privacy-first document analyzer, summarizer, and interactive Q&A 
 
 - **Package Manager**: [uv](https://docs.astral.sh/uv/) (Fast Python package manager)
 - **Document & Code Parsers**: `pypdf` and `PyMuPDF` for PDFs; Python standard library for Markdown, text, and JSON; built-in source parsing for Python and C++/C files
+- **Document Parsers**: `pypdf` and `PyMuPDF` for PDFs; Python standard library for Markdown, text, JSON, and CSV
 - **Standalone Window Engine**: `pywebview`
 - **LLM Local Server**: [LM Studio](https://lmstudio.ai/)
 - **Frontend Framework**: `streamlit`

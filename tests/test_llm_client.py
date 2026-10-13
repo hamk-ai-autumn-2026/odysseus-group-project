@@ -28,8 +28,59 @@ from src.llm_client import (
     generate_streaming_response,
     run_single_pass_summary,
     map_reduce_summary,
+    should_use_map_reduce,
+    SINGLE_PASS_MAX_CONTEXT_CHARS,
     chat_stream_response,
 )
+
+
+@pytest.mark.parametrize("filename", ["report.pdf", "REPORT.PDF"])
+@pytest.mark.parametrize("chunk_count", [1, 2])
+@pytest.mark.parametrize("enable_map_reduce", [False, True])
+def test_oversized_pdf_always_routes_to_map_reduce(filename, chunk_count, enable_map_reduce):
+    text = "x" * (SINGLE_PASS_MAX_CONTEXT_CHARS + 1)
+    assert should_use_map_reduce(filename, text, chunk_count, enable_map_reduce)
+
+
+@pytest.mark.parametrize("text_length", [SINGLE_PASS_MAX_CONTEXT_CHARS - 1, SINGLE_PASS_MAX_CONTEXT_CHARS])
+@pytest.mark.parametrize("chunk_count", [1, 2])
+@pytest.mark.parametrize("enable_map_reduce", [False, True])
+def test_pdf_within_single_pass_limit_preserves_routing(text_length, chunk_count, enable_map_reduce):
+    assert should_use_map_reduce("report.pdf", "x" * text_length, chunk_count, enable_map_reduce) == (
+        chunk_count > 1 and enable_map_reduce
+    )
+
+
+@pytest.mark.parametrize("filename", ["notes.txt", "notes.md", "notes.markdown", "data.json"])
+@pytest.mark.parametrize("chunk_count", [1, 2])
+@pytest.mark.parametrize("enable_map_reduce", [False, True])
+def test_oversized_text_formats_preserve_routing(filename, chunk_count, enable_map_reduce):
+    text = "x" * (SINGLE_PASS_MAX_CONTEXT_CHARS + 1)
+    assert should_use_map_reduce(filename, text, chunk_count, enable_map_reduce) == (
+        chunk_count > 1 and enable_map_reduce
+    )
+
+
+@pytest.mark.parametrize("page_images", [None, []])
+@patch("src.llm_client.generate_streaming_response")
+def test_single_pass_without_images_uses_text_only_prompt(mock_stream, page_images):
+    mock_stream.return_value = iter([])
+    list(run_single_pass_summary(
+        MagicMock(), "test-model", "Document content", "Executive Summary", page_images=page_images
+    ))
+    assert mock_stream.call_args.args[3] == "Here is the document text:\n\nDocument content\n\n"
+
+
+@pytest.mark.parametrize("page_images", [None, [], [{"page_num": 2, "data_url": "unused"}]])
+@patch("src.llm_client.generate_streaming_response")
+def test_map_without_matching_images_uses_text_only_prompt(mock_stream, page_images):
+    mock_stream.return_value = iter([])
+    client = MagicMock()
+    client.chat.completions.create.return_value.choices[0].message.content = "Map summary"
+    chunks = [{"chunk_id": 1, "page_range": "Page 1", "pages": [1], "text": "Document content"}]
+    list(map_reduce_summary(client, "test-model", chunks, "Executive Summary", page_images=page_images))
+    messages = client.chat.completions.create.call_args.kwargs["messages"]
+    assert messages[1]["content"] == "Document excerpt (Page 1):\n\nDocument content\n\n"
 
 
 class TestSmokeLLMClient:
@@ -402,6 +453,7 @@ class TestRunSinglePassSummary:
         user_content = args[3]
         assert isinstance(user_content, list)
         assert user_content[0]["type"] == "text"
+        assert "Analyze the attached page images as well." in user_content[0]["text"]
         assert user_content[1]["type"] == "image_url"
         assert user_content[1]["image_url"]["url"] == page_images[0]["data_url"]
 
@@ -616,6 +668,7 @@ class TestMapReduceSummary:
         user_msg = messages[1]["content"]
         assert isinstance(user_msg, list)
         assert len(user_msg) == 2  # Text + Image for Page 1 only
+        assert "Also inspect the attached page images" in user_msg[0]["text"]
         assert user_msg[1]["image_url"]["url"] == "data:image/png;base64,image1"
 
 

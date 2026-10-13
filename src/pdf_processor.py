@@ -6,6 +6,7 @@ import base64
 import re
 import pymupdf
 import json
+import csv
 from pathlib import Path
 
 
@@ -169,6 +170,28 @@ def extract_document_data(
         except json.JSONDecodeError as error:
             raise ValueError(f"{filename} contains invalid JSON: {error.msg}.") from error
         text = json.dumps(parsed_json, indent=2, ensure_ascii=False)
+    elif extension == "csv":
+        try:
+            rows = csv.reader(io.StringIO(text, newline=""), strict=True)
+            columns = next((row for row in rows if row), None)
+            if columns is None:
+                raise ValueError(f"{filename} contains no CSV header.")
+            parts = ["Columns: " + json.dumps(columns, ensure_ascii=False)]
+            row_number = 0
+            for row in rows:
+                if not row:
+                    continue
+                row_number += 1
+                if len(row) != len(columns):
+                    raise ValueError(
+                        f"{filename} CSV row {row_number} has {len(row)} values; "
+                        f"expected {len(columns)} columns."
+                    )
+                cells = [{"column": column, "value": value} for column, value in zip(columns, row)]
+                parts.append(f"Row {row_number}: " + json.dumps(cells, ensure_ascii=False))
+        except csv.Error as error:
+            raise ValueError(f"{filename} contains invalid CSV: {error}.") from error
+        text = "\n\n".join(parts)
 
     language = detect_code_language(filename, text) if extension in SUPPORTED_CODE_EXTENSIONS else "text"
     clean_text = text.strip()
@@ -231,6 +254,7 @@ def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap:
     chunks = []
     current_chunk_text = ""
     current_pages = set()
+    current_page_spans = []
     chunk_id = 1
     
     for page in pages:
@@ -264,10 +288,19 @@ def chunk_pdf_pages(pages: List[Dict[str, Any]], max_chars: int = 3500, overlap:
                 
                 # Apply overlap from end of current_chunk_text
                 overlap_text = current_chunk_text[-overlap:] if len(current_chunk_text) > overlap else current_chunk_text
+                overlap_start = len(current_chunk_text) - len(overlap_text)
+                current_page_spans = [
+                    (max(start, overlap_start) - overlap_start, end - overlap_start, number)
+                    for start, end, number in current_page_spans
+                    if end > overlap_start
+                ]
                 current_chunk_text = overlap_text + "\n\n" + para_clean
-                current_pages = {page_num}
+                current_page_spans.append((len(overlap_text) + 2, len(current_chunk_text), page_num))
+                current_pages = {number for _, _, number in current_page_spans}
             else:
+                paragraph_start = len(current_chunk_text) + (2 if current_chunk_text else 0)
                 current_chunk_text += ("\n\n" if current_chunk_text else "") + para_clean
+                current_page_spans.append((paragraph_start, len(current_chunk_text), page_num))
                 current_pages.add(page_num)
                 
     # Append final chunk if exists
