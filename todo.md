@@ -1,17 +1,15 @@
 # TODO / Progress List
 
-## 📋 Pending Tasks
+## Pending Tasks
 
-- [ ] Clean up README and main app
-- [ ] Consider scope of the project
 - [ ] Test different type of pdf documents (theses, reports, math tests, etc.)
 - [ ] Test models (Big and small)
-- [ ] Add any other file types
 
 ---
 
-## ✅ Completed Tasks
+## Completed Tasks
 
+- [x] Clean up README and main app
 - [x] Add image support (PNG, JPG/JPEG, WebP analysis and Q&A with vision-model errors and tests)
 - [x] Add CSV input with column/value preservation, summarization, Q&A, and parsing tests
 - [x] Test through README and instructions on the app
@@ -29,3 +27,8 @@
 - [x] Implement SQLite database caching & persistence (document extractions, saved summary history, chat history)
 - [x] Implement Text-to-Speech (TTS) audio report generation
 
+## Future Developement
+
+- [ ] Any other file types
+    - [ ] Proprietary formats (doc, docx, etc.)
+- [ ] Create installable package using pyinstaller
