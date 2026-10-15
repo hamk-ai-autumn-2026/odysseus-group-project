@@ -1,0 +1,7 @@
+DocumentID,Title,Author,Category,WordCount,EstimatedReadingTimeMin,AnalysisPreset,Status
+DOC-001,Quarterly Security Audit,CyberSec Team,Security,3450,14,Technical Breakdown,Approved
+DOC-002,Q3 Financial Performance Report,Finance Department,Finance,5200,21,Executive Summary,Approved
+DOC-003,Machine Learning Inference Benchmarks,AI Research Lab,Technical,4100,16,Mathematical Analysis,Review
+DOC-004,Employee Onboarding Guide,Human Resources,HR,2800,11,Actionable Takeaways,Draft
+DOC-005,Distributed Storage Architecture,Systems Infrastructure,Engineering,6300,25,Technical Breakdown,Approved
+DOC-006,Customer Feedback Synthesis 2026,Product Management,Product,1950,8,Key Insights,Approved
