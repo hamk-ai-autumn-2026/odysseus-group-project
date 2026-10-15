@@ -68,15 +68,9 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 ### 2. Configure & Start LM Studio Server
 
-You can start the LM Studio local inference server using either the **LM Studio GUI** or the **LM Studio CLI (`lms`)**:
+You can start the LM Studio local inference server using either the **LM Studio CLI (`lms`)** or the **LM Studio GUI**:
 
-#### Option A: Using LM Studio GUI
-1. Open **LM Studio** and download an instruction-tuned GGUF model (e.g., `Llama-3.2-3B-Instruct`, `Llama-3.1-8B-Instruct`, `Qwen2.5-7B-Instruct`, or `Mistral-7B-Instruct`).
-2. Go to the **Developer / Local Server** tab (`<->` icon).
-3. Select your model at the top and click **Start Server**.
-4. By default, LM Studio will start serving at `http://localhost:1234/v1`.
-
-#### Option B: Using LM Studio CLI (`lms`)
+#### Option A: Using LM Studio CLI (`lms`) (Recommended)
 If you have installed the `lms` CLI tool (via LM Studio Settings -> Install `lms` CLI):
 
 1. **Start the local server**:
@@ -97,6 +91,12 @@ If you have installed the `lms` CLI tool (via LM Studio Settings -> Install `lms
    lms server status
    ```
    The local server will run on `http://localhost:1234/v1`.
+
+#### Option B: Using LM Studio GUI
+1. Open **LM Studio** and download an instruction-tuned GGUF model (e.g., `Llama-3.2-3B-Instruct`, `Llama-3.1-8B-Instruct`, `Qwen2.5-7B-Instruct`, or `Mistral-7B-Instruct`).
+2. Go to the **Developer / Local Server** tab (`<->` icon).
+3. Select your model at the top and click **Start Server**.
+4. By default, LM Studio will start serving at `http://localhost:1234/v1`.
 
 
 ### 3. Install Dependencies with UV
@@ -129,19 +129,38 @@ uv run streamlit run app.py
 
 The app accepts source-code files as well as PDFs and text documents, so you can upload sample projects, scripts, or C++ sources for local analysis.
 
-Generated documents, summaries, and chat messages are stored in `documind.db` in the current working directory. Set `DOCUMIND_DB_PATH` to use another database location:
+### 5. Database Storage & Explorer
 
-```powershell
-$env:DOCUMIND_DB_PATH = "C:\path\to\documind.db"
-```
+Generated documents, summaries, audio voiceovers, and chat messages are persisted in a local SQLite database (`documind.db`) in the current working directory.
 
-The Streamlit **Database Explorer** page and `scripts/view_db.py` provide read-only access to database tables and queries:
+To customize the database location, set the `DOCUMIND_DB_PATH` environment variable:
 
-```bash
-uv run python scripts/view_db.py --tables
-uv run python scripts/view_db.py --data documents --limit 20
-uv run python scripts/view_db.py --query "SELECT COUNT(*) AS total FROM documents"
-```
+- **Linux / macOS (Bash / Zsh):**
+  ```bash
+  export DOCUMIND_DB_PATH="/path/to/custom/documind.db"
+  ```
+- **Windows PowerShell:**
+  ```powershell
+  $env:DOCUMIND_DB_PATH = "C:\path\to\custom\documind.db"
+  ```
+- **Windows Command Prompt (CMD):**
+  ```cmd
+  set DOCUMIND_DB_PATH=C:\path\to\custom\documind.db
+  ```
+
+To inspect or query the database:
+- Open the interactive **Database Explorer** page in Streamlit via the sidebar.
+- Or use the read-only CLI inspector script:
+  ```bash
+  # View all tables and row counts
+  uv run python scripts/view_db.py --tables
+
+  # View recent document records
+  uv run python scripts/view_db.py --data documents --limit 20
+
+  # Execute a custom read-only SQL query
+  uv run python scripts/view_db.py --query "SELECT COUNT(*) AS total FROM documents"
+  ```
 
 
 ## Running Tests & Sanity Checks
