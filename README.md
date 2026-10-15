@@ -2,7 +2,7 @@
 
 DocuMind AI is a local document analysis and summarization application. It uses Streamlit for the interface and an OpenAI-compatible LM Studio server for local language-model inference. It can summarize documents, answer questions about them, inspect extracted content, and export reports.
 
-Document parsing and LM Studio requests run locally by default. The optional text-to-speech feature uses `gTTS`, which sends summary text to Google's speech service and requires an internet connection.
+Document parsing, LM Studio requests, and neural text-to-speech run 100% locally by default. The text-to-speech feature uses local neural models via `piper-tts`, running completely offline on your device with high-quality English and Finnish neural voices (downloaded on first use and cached locally).
 
 
 ## Features
@@ -18,7 +18,7 @@ Document parsing and LM Studio requests run locally by default. The optional tex
 - Search document text, inspect individual pages, and inspect generated chunks.
 - Save document extractions, summaries, and chat history in a local SQLite database.
 - Browse the SQLite database from the Streamlit Database Explorer page or `scripts/view_db.py`.
-- Generate an optional MP3 voiceover for a summary using English or Finnish text-to-speech.
+- Generate local neural audio voiceovers (WAV) for summaries using English or Finnish Piper TTS without sending data to external services.
 - Run in a browser or in a standalone native window powered by pywebview.
 
 ## Supported Files
@@ -48,7 +48,7 @@ that a vision-capable model is required instead of retrying as text-only analysi
 - `openai` for LM Studio API requests
 - `pypdf`, `PyMuPDF`, and `Pillow` for document and image processing
 - `pywebview` for the standalone window
-- `gTTS` for the optional online text-to-speech feature
+- `piper-tts` for 100% offline, local neural text-to-speech voiceovers
 
 The default LM Studio endpoint is `http://localhost:1234/v1`. You can change it in the sidebar. A vision-capable model is required for image analysis.
 
@@ -207,7 +207,7 @@ odysseus-group-project/
 │   ├── desktop_launcher.py # pywebview standalone launcher
 │   ├── llm_client.py      # LM Studio client and analysis pipelines
 │   ├── pdf_processor.py   # Document, PDF, CSV, and image extraction
-│   ├── tts.py             # Optional gTTS voiceover generation
+│   ├── tts.py             # Local neural Piper TTS voiceover generation
 │   └── ui.py              # CSS and reusable Streamlit UI components
 └── tests/
       ├── test_app_imports.py   # Syntax and import checks
