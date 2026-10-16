@@ -32,7 +32,12 @@ def wait_for_server(url: str, timeout: float = 15.0, proc: subprocess.Popen = No
     return False
 
 def find_app_path() -> str:
-    """Locates app.py across development and packaged environments."""
+    """Locates app.py across development, wheel, and PyInstaller frozen environments."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        bundled = os.path.join(sys._MEIPASS, "app.py")
+        if os.path.isfile(bundled):
+            return bundled
+
     # 1. Check parent of src/ (standard repository structure and site-packages layout)
     candidate = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
     if os.path.isfile(candidate):
@@ -62,8 +67,13 @@ def launch_standalone_app():
     # Force dark mode for embedded QtWebEngine Chromium renderer
     env["QTWEBENGINE_CHROMIUM_FLAGS"] = "--force-dark-mode"
     
-    cmd = [
-        sys.executable, "-m", "streamlit", "run", app_py_path,
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        server_exec_args = [sys.executable, "--server", "run", app_py_path]
+    else:
+        server_exec_args = [sys.executable, "-m", "streamlit", "run", app_py_path]
+
+    cmd = server_exec_args + [
         "--server.port", str(port),
         "--server.address", "127.0.0.1",
         "--server.headless", "true",

@@ -11,5 +11,8 @@ st.set_page_config(
 # Inject custom styling
 inject_custom_css()
 
+# Navigation link back to Document Analyzer
+st.page_link("app.py", label="Back to Document Analyzer", icon="⬅️")
+
 # Render SQLite DB Viewer
 render_sqlite_db_viewer()
