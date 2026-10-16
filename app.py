@@ -87,6 +87,7 @@ def load_document_from_db(file_hash: str):
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## ⚙️ Control Center")
+    st.page_link("pages/db.py", label="Database Explorer", icon="🗄️", help="Inspect all stored documents, summaries, and chat history")
 
     # Recent Documents Library Expander
     recent_docs = list_recent_documents(limit=15)
@@ -115,6 +116,9 @@ with st.sidebar:
                         st.session_state.summary_output = ""
                     st.success("Document deleted from local SQLite store.")
                     st.rerun()
+
+            st.divider()
+            st.page_link("pages/db.py", label="Open Full Database Explorer", icon="🗄️")
 
     with st.expander("🔌 LM Studio Connection", expanded=True):
         lm_url = st.text_input("LM Studio Server URL", value=DEFAULT_BASE_URL, help="Default: http://localhost:1234/v1")
@@ -232,7 +236,7 @@ if uploaded_file is not None:
                         uploaded_file.name,
                         include_images=True,
                     )
-                except ValueError as error:
+                except Exception as error:
                     st.session_state.pdf_data = None
                     st.error(f"⚠️ Could not read document: {error}")
                 else:
@@ -585,14 +589,17 @@ if pdf_data:
 
         with insp_tab2:
             page_numbers = [p["page_num"] for p in pdf_data["pages"]]
-            selected_page_num = st.selectbox("Select Page Number", options=page_numbers, index=0)
-            page_obj = next(p for p in pdf_data["pages"] if p["page_num"] == selected_page_num)
-
-            st.markdown(f"#### Page {selected_page_num} ({page_obj['word_count']} words, {page_obj['char_count']} chars)")
-            if is_standalone_image:
-                image_url = pdf_data["page_images"][0]["data_url"]
-                st.image(base64.b64decode(image_url.split(",", 1)[1]))
-            st.text_area("Page Text Content", value=page_obj["text"], height=400, key=f"page_text_{selected_page_num}")
+            if not page_numbers:
+                st.info("No pages found in this document.")
+            else:
+                selected_page_num = st.selectbox("Select Page Number", options=page_numbers, index=0)
+                page_obj = next((p for p in pdf_data["pages"] if p["page_num"] == selected_page_num), None)
+                if page_obj:
+                    st.markdown(f"#### Page {selected_page_num} ({page_obj['word_count']} words, {page_obj['char_count']} chars)")
+                    if is_standalone_image and pdf_data.get("page_images"):
+                        image_url = pdf_data["page_images"][0]["data_url"]
+                        st.image(base64.b64decode(image_url.split(",", 1)[1]))
+                    st.text_area("Page Text Content", value=page_obj["text"], height=400, key=f"page_text_{selected_page_num}")
 
         with insp_tab3:
             chunks = chunk_pdf_pages(pdf_data["pages"], max_chars=max_chunk_chars)

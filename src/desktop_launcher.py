@@ -17,10 +17,12 @@ def find_free_port(default_port: int = 8501) -> int:
             s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
 
-def wait_for_server(url: str, timeout: float = 15.0) -> bool:
-    """Polls local server URL until it responds or times out."""
+def wait_for_server(url: str, timeout: float = 15.0, proc: subprocess.Popen = None) -> bool:
+    """Polls local server URL until it responds, times out, or the process terminates."""
     start_time = time.time()
     while time.time() - start_time < timeout:
+        if proc and proc.poll() is not None:
+            return False
         try:
             with urllib.request.urlopen(url, timeout=1.0) as response:
                 if response.status == 200:
@@ -29,17 +31,36 @@ def wait_for_server(url: str, timeout: float = 15.0) -> bool:
             time.sleep(0.2)
     return False
 
+def find_app_path() -> str:
+    """Locates app.py across development and packaged environments."""
+    # 1. Check parent of src/ (standard repository structure and site-packages layout)
+    candidate = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+    if os.path.isfile(candidate):
+        return candidate
+    # 2. Check current working directory
+    candidate = os.path.abspath("app.py")
+    if os.path.isfile(candidate):
+        return candidate
+    # 3. Fallback to candidate path for error reporting
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app.py"))
+
 def launch_standalone_app():
     """Launches DocuMind AI in a standalone GUI window without opening a web browser."""
     port = find_free_port(8501)
     server_url = f"http://127.0.0.1:{port}"
     
-    # Root dir of project
-    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    app_py_path = os.path.join(root_dir, "app.py")
+    app_py_path = find_app_path()
+    if not os.path.isfile(app_py_path):
+        print(f"❌ Error: Could not locate 'app.py' at {app_py_path}")
+        sys.exit(1)
+    
+    app_dir = os.path.dirname(app_py_path)
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{app_dir}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else app_dir
     
     # Force dark mode for embedded QtWebEngine Chromium renderer
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--force-dark-mode"
+    env["QTWEBENGINE_CHROMIUM_FLAGS"] = "--force-dark-mode"
     
     cmd = [
         sys.executable, "-m", "streamlit", "run", app_py_path,
@@ -59,16 +80,24 @@ def launch_standalone_app():
     print(f"🚀 Starting DocuMind AI local server on port {port}...")
     proc = subprocess.Popen(
         cmd,
-        cwd=root_dir,
+        cwd=os.getcwd(),
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE
     )
     
     try:
-        ready = wait_for_server(server_url, timeout=15.0)
+        ready = wait_for_server(server_url, timeout=15.0, proc=proc)
         if not ready:
-            print("⚠️ Server launch timed out. Terminating background process.")
-            proc.terminate()
+            if proc.poll() is not None:
+                _, stderr = proc.communicate(timeout=2)
+                err_text = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+                print(f"❌ Server process exited prematurely with code {proc.returncode}.")
+                if err_text:
+                    print(f"Error details:\n{err_text}")
+            else:
+                print("⚠️ Server launch timed out. Terminating background process.")
+                proc.terminate()
             sys.exit(1)
             
         print("✨ Server ready! Opening standalone window...")

@@ -434,9 +434,9 @@ def render_tts_player(
 
     with c_right:
         if has_audio:
-            st.audio(st.session_state[tts_key], format="audio/mp3", autoplay=False)
+            st.audio(st.session_state[tts_key], format="audio/wav", autoplay=False)
         else:
-            st.info("Click **Generate Audio Voiceover** to create and play an MP3 summary.", icon="🎧")
+            st.info("Click **Generate Audio Voiceover** to create and play a neural voiceover.", icon="🎧")
 
 
 def render_sqlite_db_viewer(db_path: Optional[str] = None):

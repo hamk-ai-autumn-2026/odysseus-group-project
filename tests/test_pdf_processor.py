@@ -46,6 +46,19 @@ def test_extract_pdf_data_structure():
     assert all(page["has_image"] for page in data["pages"])
 
 
+def test_extract_pdf_data_rejects_corrupt_bytes():
+    with pytest.raises(ValueError, match="Could not open or parse PDF file"):
+        extract_pdf_data(b"Not a valid PDF file content at all")
+
+
+def test_extract_pdf_data_rejects_empty_pdf():
+    writer = PdfWriter()
+    buf = io.BytesIO()
+    writer.write(buf)
+    with pytest.raises(ValueError, match="0 pages or contains no content"):
+        extract_pdf_data(buf.getvalue())
+
+
 @pytest.mark.parametrize(
     ("filename", "content", "expected_text"),
     [

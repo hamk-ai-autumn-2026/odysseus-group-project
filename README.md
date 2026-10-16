@@ -1,68 +1,76 @@
-# DocuMind AI - Local Document Analyzer & Summarizer
+# DocuMind AI
 
-A fully local, privacy-first document analyzer, summarizer, and interactive Q&A assistant built with **Python (managed by UV)**, **PyPDF**, **LM Studio (OpenAI-compatible local API)**, **pywebview**, and **Streamlit**.
+DocuMind AI is a local document analysis and summarization application. It uses Streamlit for the interface and an OpenAI-compatible LM Studio server for local language-model inference. It can summarize documents, answer questions about them, inspect extracted content, and export reports.
 
----
+Document parsing, LM Studio requests, and neural text-to-speech run 100% locally by default. The text-to-speech feature uses local neural models via `piper-tts`, running completely offline on your device with high-quality English and Finnish neural voices (downloaded on first use and cached locally).
+
 
 ## Features
 
-- **100% Local & Private**: No data leaves your machine. Powered by local LLMs via LM Studio.
-- **Standalone Desktop Interface**: Runs in a dedicated native window without opening an external web browser.
-- **Multi-format Extraction**: Analyzes PDF, Markdown (`.md`/`.markdown`), plain text (`.txt`), JSON (`.json`), CSV (`.csv`), Python (`.py`/`.pyi`), and C++/C source files (`.cpp`, `.cc`, `.cxx`, `.c`, `.h`, `.hpp`). PDFs also support page images for vision-capable local LLMs.
-- **CSV Analysis & Q&A**: Upload UTF-8 comma-separated files (an optional BOM is supported). The first record supplies column names; numbered rows preserve each column/value pair as text, including quoted commas, multiline values, empty cells, and leading zeros. Blank lines are skipped; malformed quoting and inconsistent row lengths are rejected. Header-only files are accepted. CSV uses the existing text summarization and document chat pipeline.
-- **Standalone Image Analysis & Q&A**: Upload PNG (`.png`), JPEG (`.jpg`/`.jpeg`), or WebP (`.webp`) images. Use the existing analysis presets, custom instructions, output language, report exports, and chat. Images are validated and sent to the selected LM Studio model as image input; they are not decoded as document text or processed with local OCR.
-- **Code Reader / Analyzer**: Detects Python and C++ source structure, counts functions/classes/imports, chunks code by line ranges, and supports keyword search across source files.
-- **Summary Language Selection**: Choose Same as Document, English, or Finnish for single-pass and map-reduce summaries.
-- **Multi-Preset Summarization**:
-  - Executive Summary (Overview, Main Themes, Conclusions)
-  - Key Insights & Bullet Points (Top findings with bold callouts)
-  - Technical Breakdown (Architectures, formulas, datasets, and numbers)
-  - Actionable Takeaways & Next Steps (Strategic recommendations & action items)
-  - Custom Prompting (Run arbitrary analysis instructions on document text)
-- **Map-Reduce for Large Documents**: Automatically chunks long documents and synthesizes section-by-section summaries.
-- **SQLite Persistence & Instant Caching**: Document extractions, past summary reports, and Q&A chat history are persisted in a local SQLite database (`documind.db`). Re-uploading or selecting a saved document loads instantly from cache.
-- **Recent Documents Library**: Seamlessly switch between previously analyzed documents from the sidebar library.
-- **Modern Glassmorphic UI**: Sleek dark mode styling, real-time response streaming, metric cards, and one-click Markdown/TXT exports.
+- Analyze PDF, Markdown, text, JSON, CSV, Python, C, and C/C++ header/source files.
+- Analyze PNG, JPEG, and WebP images with a vision-capable model.
+- Extract PDF text, metadata, page images, word counts, character counts, and estimated reading time.
+- Choose presets for executive summaries, key insights, technical breakdowns, actionable takeaways, mathematical analysis, or custom prompts.
+- Select the output language: same as the document, English, or Finnish.
+- Use map-reduce processing for large documents and stream generated responses.
+- Stop an active analysis request and avoid saving incomplete reports.
+- Chat with a document using relevant document sections as context.
+- Search document text, inspect individual pages, and inspect generated chunks.
+- Save document extractions, summaries, and chat history in a local SQLite database.
+- Browse the SQLite database from the Streamlit Database Explorer page or `scripts/view_db.py`.
+- Generate local neural audio voiceovers (WAV) for summaries using English or Finnish Piper TTS without sending data to external services.
+- Run in a browser or in a standalone native window powered by pywebview.
 
----
+## Supported Files
+
+| Category | Extensions | Processing |
+| --- | --- | --- |
+| Documents | `.pdf`, `.md`, `.markdown`, `.txt`, `.json`, `.csv` | Local text extraction and analysis |
+| Images | `.png`, `.jpg`, `.jpeg`, `.webp` | Image input for a vision-capable LM Studio model; no local OCR |
+| Source code | `.py`, `.pyi`, `.cpp`, `.cxx`, `.cc`, `.c`, `.h`, `.hpp` | Text analysis plus source metrics and chunking |
+
+Text files must be valid UTF-8. JSON is parsed and formatted before analysis. CSV files use Python's strict CSV parser; the first non-empty record is used as the header row.
+
+#### Image analysis
+
+If you plan to upload PNG, JPEG, or WebP files, load a vision-capable multimodal
+model in LM Studio. Text-only models can analyze extracted document text but cannot
+interpret image input. If the selected model rejects image input, the app reports
+that a vision-capable model is required instead of retrying as text-only analysis.
+
 
 ## Requirements & Stack
 
-- **Package Manager**: [uv](https://docs.astral.sh/uv/) (Fast Python package manager)
-- **Document & Code Parsers**: `pypdf` and `PyMuPDF` for PDFs; Python standard library for Markdown, text, JSON, and CSV; built-in source parsing for Python and C++/C files
-- **Image Validation**: `Pillow` for standalone PNG, JPEG, and WebP uploads
-- **Standalone Window Engine**: `pywebview`
-- **LLM Local Server**: [LM Studio](https://lmstudio.ai/)
-- **Frontend Framework**: `streamlit`
-- **LLM Client**: `openai` (configured to point to LM Studio's local endpoint `http://localhost:1234/v1`)
+- Python 3.13 or newer
+- [uv](https://docs.astral.sh/uv/)
+- [LM Studio](https://lmstudio.ai/) with an OpenAI-compatible local server
+- `streamlit` for the interface
+- `openai` for LM Studio API requests
+- `pypdf`, `PyMuPDF`, and `Pillow` for document and image processing
+- `pywebview` for the standalone window
+- `piper-tts` for 100% offline, local neural text-to-speech voiceovers
 
----
+The default LM Studio endpoint is `http://localhost:1234/v1`. You can change it in the sidebar. A vision-capable model is required for image analysis.
+
 
 ## Quickstart Guide
 
 ### 1. Prerequisites
 
-Ensure you have **LM Studio** and **UV** installed on your system.
+Ensure you have **LM Studio** and **uv** installed on your system.
 
-- Install `uv` (if not already installed):
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
-  ```bash
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+```bash
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
 ### 2. Configure & Start LM Studio Server
 
-You can start the LM Studio local inference server using either the **LM Studio GUI** or the **LM Studio CLI (`lms`)**:
+You can start the LM Studio local inference server using either the **LM Studio CLI (`lms`)** or the **LM Studio GUI**:
 
-#### Option A: Using LM Studio GUI
-1. Open **LM Studio** and download an instruction-tuned GGUF model (e.g., `Llama-3.2-3B-Instruct`, `Llama-3.1-8B-Instruct`, `Qwen2.5-7B-Instruct`, or `Mistral-7B-Instruct`).
-2. Go to the **Developer / Local Server** tab (`<->` icon).
-3. Select your model at the top and click **Start Server**.
-4. By default, LM Studio will start serving at `http://localhost:1234/v1`.
-
-#### Option B: Using LM Studio CLI (`lms`)
+#### Option A: Using LM Studio CLI (`lms`) (Recommended)
 If you have installed the `lms` CLI tool (via LM Studio Settings -> Install `lms` CLI):
 
 1. **Start the local server**:
@@ -84,6 +92,13 @@ If you have installed the `lms` CLI tool (via LM Studio Settings -> Install `lms
    ```
    The local server will run on `http://localhost:1234/v1`.
 
+#### Option B: Using LM Studio GUI
+1. Open **LM Studio** and download an instruction-tuned GGUF model (e.g., `Llama-3.2-3B-Instruct`, `Llama-3.1-8B-Instruct`, `Qwen2.5-7B-Instruct`, or `Mistral-7B-Instruct`).
+2. Go to the **Developer / Local Server** tab (`<->` icon).
+3. Select your model at the top and click **Start Server**.
+4. By default, LM Studio will start serving at `http://localhost:1234/v1`.
+
+
 ### 3. Install Dependencies with UV
 
 Running with `uv` automatically sets up the venv and syncs dependencies:
@@ -91,17 +106,6 @@ Running with `uv` automatically sets up the venv and syncs dependencies:
 ```bash
 uv sync
 ```
-
-For image analysis, load a vision-capable multimodal model in LM Studio. Text-only
-models can still analyze the extracted PDF text, but they cannot interpret rendered
-page images.
-
-Standalone image analysis and image Q&A require a **vision-capable model** loaded
-in LM Studio. Selecting a model such as `bonsai-27b` does not establish that it
-supports vision. If the selected model or server rejects image input, the app
-shows a clear vision-model requirement and the server error, without retrying a
-text-only analysis. Image uploads have zero extracted text words until the model
-analyzes the image; the Page Viewer displays the uploaded image.
 
 ### 4. Run the Application
 
@@ -125,7 +129,38 @@ uv run streamlit run app.py
 
 The app accepts source-code files as well as PDFs and text documents, so you can upload sample projects, scripts, or C++ sources for local analysis.
 
----
+### 5. Database Storage & Explorer
+
+Generated documents, summaries, audio voiceovers, and chat messages are persisted in a local SQLite database (`documind.db`) in the current working directory.
+
+To customize the database location, set the `DOCUMIND_DB_PATH` environment variable:
+
+- **Linux / macOS (Bash / Zsh):**
+  ```bash
+  export DOCUMIND_DB_PATH="/path/to/custom/documind.db"
+  ```
+- **Windows PowerShell:**
+  ```powershell
+  $env:DOCUMIND_DB_PATH = "C:\path\to\custom\documind.db"
+  ```
+- **Windows Command Prompt (CMD):**
+  ```cmd
+  set DOCUMIND_DB_PATH=C:\path\to\custom\documind.db
+  ```
+
+To inspect or query the database:
+- Open the interactive **Database Explorer** page in Streamlit via the sidebar.
+- Or use the read-only CLI inspector script:
+  ```bash
+  # View all tables and row counts
+  uv run python scripts/view_db.py --tables
+
+  # View recent document records
+  uv run python scripts/view_db.py --data documents --limit 20
+
+  # Execute a custom read-only SQL query
+  uv run python scripts/view_db.py --query "SELECT COUNT(*) AS total FROM documents"
+  ```
 
 ## Running Tests & Sanity Checks
 
@@ -150,14 +185,13 @@ scripts\run_checks.bat
 ```bash
 uv run python scripts/run_checks.py
 ```
-*or using pytest directly:*
+
+The checks verify the uv environment, run the full pytest suite, and import the Streamlit application to catch syntax and import errors. To run pytest directly:
+
 ```bash
 uv run pytest -v
 ```
 
-For full details on unit tests, smoke tests, and edge-case coverage (Unicode, floating point inf/nan, stop signals), see [tests/README.md](tests/README.md).
-
----
 
 ## Project Structure
 
@@ -168,38 +202,36 @@ odysseus-group-project/
 ├── pyproject.toml         # UV project configuration and dependencies
 ├── uv.lock                # UV lockfile
 ├── todo.md                # Project progress & task checklist
-├── .env.example           # Environment configuration template
+├── .env.example           # Example LM Studio settings
 ├── README.md              # Project documentation
-├── Docs/                  # Sample PDF documents and output reports
-├── testdocs/              # Sample text, JSON, and source-code fixtures for validation
+├── pages/
+│   └── db.py              # Streamlit SQLite database viewer page
+├── testdocs/              # Sample text, JSON, and source-code fixtures
 │   ├── sample_python.py
 │   ├── sample_cpp.cpp
 │   ├── test_document.md
 │   ├── test_document.txt
 │   └── test_document.json
 ├── scripts/
-│   ├── run_checks.sh      # Linux/macOS bash sanity check script
-│   ├── run_checks.bat     # Windows CMD sanity check script
-│   ├── run_checks.ps1     # Windows PowerShell sanity check script
-│   └── run_checks.py      # Cross-platform Python sanity check runner
+│   ├── run_checks.bat     # Windows CMD checks
+│   ├── run_checks.ps1     # Windows PowerShell checks
+│   ├── run_checks.py      # Cross-platform checks
+│   ├── run_checks.sh      # Linux/macOS checks
+│   └── view_db.py         # Read-only SQLite database viewer
 ├── src/
-│   ├── __init__.py        # Package initialization
-│   ├── code_analyzer.py   # Code parsing, detection, chunking, and search for Python/C++
-│   ├── code_reader.py     # Compatibility wrapper for code-analysis entry points
-│   ├── db.py              # SQLite storage layer for caching & session persistence
-│   ├── desktop_launcher.py# Standalone native window launcher via pywebview
-│   ├── llm_client.py      # LM Studio OpenAI API client & map-reduce engine
-│   ├── pdf_processor.py   # Multi-format extraction, PDF image rendering, and chunking
-│   └── ui.py              # Custom CSS styling, hero banner, and UI components
+│   ├── code_analyzer.py   # Source-code detection and metrics
+│   ├── code_reader.py     # Code-reader compatibility helpers
+│   ├── db.py              # SQLite persistence and database queries
+│   ├── desktop_launcher.py # pywebview standalone launcher
+│   ├── llm_client.py      # LM Studio client and analysis pipelines
+│   ├── pdf_processor.py   # Document, PDF, CSV, and image extraction
+│   ├── tts.py             # Local neural Piper TTS voiceover generation
+│   └── ui.py              # CSS and reusable Streamlit UI components
 └── tests/
-    ├── __init__.py        # Test package initialization
-    ├── README.md          # Test suite documentation & coverage guide
-    ├── test_app_imports.py   # Syntax and import sanity tests
-    ├── test_code_analyzer.py # Unit tests for Python/C++ code parsing
-    ├── test_code_reader.py   # Compatibility checks for the code reader API
-    ├── test_db.py            # Unit tests for SQLite storage layer
-    ├── test_llm_client.py    # Unit & smoke tests for LLM client functions
-    └── test_pdf_processor.py # Unit tests for PDF and text parsing
+      ├── test_app_imports.py   # Syntax and import checks
+      ├── test_code_analyzer.py # Source-code analysis tests
+      ├── test_db.py            # SQLite persistence tests
+      ├── test_llm_client.py    # LM Studio client and analysis tests
+      ├── test_pdf_processor.py # Document extraction tests
+      └── test_tts.py           # Text-to-speech utility tests
 ```
-
----

@@ -14,7 +14,7 @@ dependencies = [
     "pywebview>=6.2.1",
     "qtpy>=2.4.3",
     "streamlit>=1.64.0",
-    "gtts>=2.5.1",
+    "piper-tts>=1.8.0",
 ]
 
 [project.scripts]
@@ -25,7 +25,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["src"]
+packages = ["src", "pages"]
+py-modules = ["app"]
 
 [tool.uv]
 package = true
