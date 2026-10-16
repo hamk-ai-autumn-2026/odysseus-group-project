@@ -20,6 +20,7 @@ htmlcov/
 *.egg
 build/
 dist/
+.github/
 
 # Streamlit Local Cache & Config
 .streamlit/secrets.toml

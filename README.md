@@ -162,6 +162,22 @@ To inspect or query the database:
   uv run python scripts/view_db.py --query "SELECT COUNT(*) AS total FROM documents"
   ```
 
+### 6. Building Standalone Binaries (Optional)
+
+You can package DocuMind AI into a self-contained desktop executable using PyInstaller and the provided [`DocuMind.spec`](DocuMind.spec) configuration:
+
+```bash
+uv run pyinstaller --noconfirm DocuMind.spec
+```
+
+The compiled application will be generated in `dist/` with platform-specific naming:
+- **Linux**: `dist/DocuMind-linux/DocuMind-linux`
+- **Windows**: `dist/DocuMind-windows/DocuMind-windows.exe`
+- **macOS**: `dist/DocuMind-macos/DocuMind-macos`
+
+> [!NOTE]
+> PyInstaller packages the host OS's native libraries, so Windows binaries must be built on a Windows system and Linux binaries on Linux.
+
 
 ## Running Tests & Sanity Checks
 
@@ -204,6 +220,7 @@ odysseus-group-project/
 ├── uv.lock                # UV lockfile
 ├── todo.md                # Project progress & task checklist
 ├── .env.example           # Example LM Studio settings
+├── DocuMind.spec          # PyInstaller standalone desktop bundle specification
 ├── README.md              # Project documentation
 ├── pages/
 │   └── db.py              # Streamlit SQLite database viewer page

@@ -26,9 +26,9 @@
 - [x] Fix desktop notifications?
 - [x] Implement SQLite database caching & persistence (document extractions, saved summary history, chat history)
 - [x] Implement Text-to-Speech (TTS) audio report generation
+- [x] Create binaries for Windows and Linux using pyinstaller
 
 ## Future Developement
 
 - [ ] Any other file types
     - [ ] Proprietary formats (doc, docx, etc.)
-- [ ] Create installable package using pyinstaller

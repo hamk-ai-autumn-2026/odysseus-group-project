@@ -87,6 +87,7 @@ def load_document_from_db(file_hash: str):
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## ⚙️ Control Center")
+    st.page_link("pages/db.py", label="Database Explorer", icon="🗄️", help="Inspect all stored documents, summaries, and chat history")
 
     # Recent Documents Library Expander
     recent_docs = list_recent_documents(limit=15)
@@ -115,6 +116,9 @@ with st.sidebar:
                         st.session_state.summary_output = ""
                     st.success("Document deleted from local SQLite store.")
                     st.rerun()
+
+            st.divider()
+            st.page_link("pages/db.py", label="Open Full Database Explorer", icon="🗄️")
 
     with st.expander("🔌 LM Studio Connection", expanded=True):
         lm_url = st.text_input("LM Studio Server URL", value=DEFAULT_BASE_URL, help="Default: http://localhost:1234/v1")
