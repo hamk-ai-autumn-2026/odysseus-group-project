@@ -2,8 +2,6 @@
 
 ## Pending Tasks
 
-- [ ] Test different type of pdf documents (theses, reports, math tests, etc.)
-- [ ] Test models (Big and small)
 
 ---
 
@@ -21,14 +19,17 @@
 - [x] Add PDF image extraction support
 - [x] Add JSON input support
 - [x] Add TXT input support
-- [x] Add DOCX input support
+- [x] Add Source code support (C, C++, Python)
 - [x] Add MD input support
 - [x] Fix desktop notifications?
 - [x] Implement SQLite database caching & persistence (document extractions, saved summary history, chat history)
 - [x] Implement Text-to-Speech (TTS) audio report generation
+- [x] Test different type of pdf documents (theses, reports, math tests, etc.)
+- [x] Test models (Big and small)
 
 ## Future Developement
 
 - [ ] Any other file types
     - [ ] Proprietary formats (doc, docx, etc.)
 - [ ] Create installable package using pyinstaller
+- [ ] STT support
