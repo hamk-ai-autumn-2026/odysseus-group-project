@@ -126,8 +126,16 @@ def test_extract_standalone_image(extension, image_format, mime_type):
     image = data["page_images"][0]
     assert image["page_num"] == 1
     prefix, payload = image["data_url"].split(",", 1)
-    assert prefix == f"data:{mime_type};base64"
-    assert base64.b64decode(payload) == image_bytes
+    expected_output_mime = "image/png" if image_format == "WEBP" else mime_type
+    assert prefix == f"data:{expected_output_mime};base64"
+    output_bytes = base64.b64decode(payload)
+    if image_format == "WEBP":
+        assert output_bytes != image_bytes
+        with Image.open(io.BytesIO(output_bytes)) as output_image:
+            assert output_image.format == "PNG"
+            assert output_image.size == (8, 8)
+    else:
+        assert output_bytes == image_bytes
     # Its serializable data can use the existing SQLite cache.
     assert json.loads(json.dumps(data)) == data
 

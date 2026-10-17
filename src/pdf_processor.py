@@ -36,6 +36,8 @@ def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
     """Validate an image and retain its bytes for multimodal analysis, without OCR."""
     extension = Path(filename).suffix.lower().lstrip(".")
     expected_format = {"png": "PNG", "jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP"}[extension]
+    normalized_bytes = file_bytes
+    output_format = expected_format
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -45,9 +47,14 @@ def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
                 image.verify()
             with Image.open(io.BytesIO(file_bytes)) as image:
                 image.load()
+                if expected_format == "WEBP":
+                    output = io.BytesIO()
+                    image.convert("RGBA").save(output, format="PNG")
+                    normalized_bytes = output.getvalue()
+                    output_format = "PNG"
     except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
         raise ValueError(f"{filename} is invalid or cannot be safely decoded as an image.") from error
-    mime_type = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}[expected_format]
+    mime_type = {"PNG": "image/png", "JPEG": "image/jpeg"}[output_format]
     return {
         "input_type": "image",
         "pages": [{"page_num": 1, "text": "", "char_count": 0, "word_count": 0, "has_image": True}],
@@ -63,7 +70,7 @@ def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
         },
         "page_images": [{
             "page_num": 1,
-            "data_url": f"data:{mime_type};base64," + base64.b64encode(file_bytes).decode("ascii"),
+            "data_url": f"data:{mime_type};base64," + base64.b64encode(normalized_bytes).decode("ascii"),
         }],
     }
 
