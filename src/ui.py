@@ -205,11 +205,17 @@ def render_hero_header():
         unsafe_allow_html=True
     )
 
-def render_metric_cards(total_pages: int, total_words: int, total_chars: int, est_read_min: int):
+def render_metric_cards(
+    total_pages: int,
+    total_words: int,
+    total_chars: int,
+    est_read_min: int,
+    picture_count: int = 0,
+):
     """
     Renders stylized metric summary cards.
     """
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         st.markdown(
             f"""
@@ -241,6 +247,16 @@ def render_metric_cards(total_pages: int, total_words: int, total_chars: int, es
             unsafe_allow_html=True
         )
     with c4:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <div class="metric-value">{picture_count:,}</div>
+                <div class="metric-label">Picture Count</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with c5:
         st.markdown(
             f"""
             <div class="metric-card">
