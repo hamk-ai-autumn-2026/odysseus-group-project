@@ -124,7 +124,8 @@ def generate_streaming_response(
         
         for chunk in response:
             if check_stop and check_stop():
-                response.close()
+                if hasattr(response, "close"):
+                    response.close()
                 yield "\n\n⏹️ **Analysis stopped by user.**"
                 return
             if chunk.choices and len(chunk.choices) > 0:
@@ -146,7 +147,7 @@ def generate_streaming_response(
         else:
             yield f"\n\n⚠️ **LM Studio Error**: {err_str}"
     finally:
-        if response is not None:
+        if response is not None and hasattr(response, "close"):
             response.close()
 
 LANGUAGE_PROMPTS = {
