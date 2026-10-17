@@ -226,8 +226,23 @@ if uploaded_file is not None:
         cached_doc = get_document_by_hash(file_hash)
         if cached_doc:
             cached_pdf_data = cached_doc["pdf_data"]
+            cached_pages = cached_pdf_data.get("pages", [])
+            cache_missing_picture_counts = (
+                uploaded_file.name.lower().endswith(".pdf")
+                and (
+                    "picture_count" not in cached_pdf_data
+                    or any("picture_count" not in page for page in cached_pages)
+                )
+            )
+            if cache_missing_picture_counts:
+                cached_pdf_data = extract_document_data(
+                    file_bytes,
+                    uploaded_file.name,
+                    include_images=True,
+                )
+                save_document(file_hash, uploaded_file.name, file_bytes, cached_pdf_data)
             # If standalone image was cached without page_images, re-extract from uploaded file_bytes
-            if cached_pdf_data.get("input_type") == "image" and not cached_pdf_data.get("page_images"):
+            elif cached_pdf_data.get("input_type") == "image" and not cached_pdf_data.get("page_images"):
                 cached_pdf_data = extract_document_data(file_bytes, uploaded_file.name, include_images=True)
                 save_document(file_hash, uploaded_file.name, file_bytes, cached_pdf_data)
             st.session_state.pdf_data = cached_pdf_data

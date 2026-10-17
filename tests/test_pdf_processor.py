@@ -71,6 +71,27 @@ def test_extract_pdf_data_counts_embedded_pictures():
     assert data["page_images"] == []
 
 
+def test_extract_pdf_data_counts_reused_picture_instances():
+    image_buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "blue").save(image_buffer, format="PNG")
+
+    document = pymupdf.open()
+    page = document.new_page()
+    image_xref = page.insert_image(
+        pymupdf.Rect(0, 0, 100, 100), stream=image_buffer.getvalue()
+    )
+    page.insert_image(
+        pymupdf.Rect(100, 0, 200, 100), xref=image_xref
+    )
+    pdf_bytes = document.tobytes()
+    document.close()
+
+    data = extract_pdf_data(pdf_bytes, include_images=False)
+
+    assert data["picture_count"] == 2
+    assert data["pages"][0]["picture_count"] == 2
+
+
 def test_extract_pdf_data_rejects_corrupt_bytes():
     with pytest.raises(ValueError, match="Could not open or parse PDF file"):
         extract_pdf_data(b"Not a valid PDF file content at all")

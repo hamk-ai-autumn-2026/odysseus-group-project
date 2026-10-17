@@ -108,6 +108,12 @@ def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Di
     return images
 
 
+def _count_page_pictures(page: Any) -> int:
+    """Count image instances displayed on a PDF page, including inline images."""
+    image_info = page.get_image_info(xrefs=True)
+    return len(image_info)
+
+
 def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str, Any]:
     """
     Extracts text, metadata, and statistics from PDF file bytes.
@@ -143,7 +149,7 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
                     page_text = ""
 
             clean_text = page_text.strip()
-            picture_count = len(page.get_images(full=True))
+            picture_count = _count_page_pictures(page)
             pages_data.append({
                 "page_num": i + 1,
                 "text": clean_text,
