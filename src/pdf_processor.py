@@ -143,12 +143,14 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
                     page_text = ""
 
             clean_text = page_text.strip()
+            picture_count = len(page.get_images(full=True))
             pages_data.append({
                 "page_num": i + 1,
                 "text": clean_text,
                 "char_count": len(clean_text),
                 "word_count": len(clean_text.split()),
-                "has_image": False,
+                "has_image": picture_count > 0,
+                "picture_count": picture_count,
             })
             if clean_text:
                 full_text += f"\n--- Page {i + 1} ---\n" + clean_text
@@ -169,20 +171,18 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
         # Average reading speed ~ 200 words per min
         est_reading_time = math.ceil(total_words / 200) if total_words > 0 else 0
 
+        total_pictures = sum(page["picture_count"] for page in pages_data)
         page_images = []
         if include_images:
             try:
                 page_images = _render_page_images(file_bytes)
             except Exception:
                 page_images = []
-        images_by_page = {image["page_num"]: image for image in page_images}
-        for page in pages_data:
-            page["has_image"] = page["page_num"] in images_by_page
-
         return {
             "pages": pages_data,
             "full_text": full_text.strip(),
             "total_pages": total_pages,
+            "picture_count": total_pictures,
             "total_words": total_words,
             "total_chars": total_chars,
             "est_reading_time": est_reading_time,
@@ -270,6 +270,7 @@ def extract_document_data(
         "char_count": len(clean_text),
         "word_count": len(clean_text.split()),
         "has_image": False,
+        "picture_count": 0,
     }
     total_words = page["word_count"]
     total_chars = page["char_count"]
@@ -286,6 +287,7 @@ def extract_document_data(
         "pages": [page],
         "full_text": clean_text,
         "total_pages": 1,
+        "picture_count": 0,
         "total_words": total_words,
         "total_chars": total_chars,
         "est_reading_time": math.ceil(total_words / 200) if total_words else 0,

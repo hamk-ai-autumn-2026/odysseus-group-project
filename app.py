@@ -268,6 +268,7 @@ if pdf_data:
         total_pages=pdf_data["total_pages"],
         total_words=pdf_data["total_words"],
         total_chars=pdf_data["total_chars"],
+        picture_count=pdf_data.get("picture_count", 0),
         est_read_min=pdf_data["est_reading_time"],
     )
 
