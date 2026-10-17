@@ -194,6 +194,11 @@ uploaded_file = st.file_uploader(
         "markdown",
         "txt",
         "json",
+        "csv",
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
         "py",
         "pyi",
         "cpp",
@@ -220,7 +225,12 @@ if uploaded_file is not None:
         # First check if document already exists in SQLite cache
         cached_doc = get_document_by_hash(file_hash)
         if cached_doc:
-            st.session_state.pdf_data = cached_doc["pdf_data"]
+            cached_pdf_data = cached_doc["pdf_data"]
+            # If standalone image was cached without page_images, re-extract from uploaded file_bytes
+            if cached_pdf_data.get("input_type") == "image" and not cached_pdf_data.get("page_images"):
+                cached_pdf_data = extract_document_data(file_bytes, uploaded_file.name, include_images=True)
+                save_document(file_hash, uploaded_file.name, file_bytes, cached_pdf_data)
+            st.session_state.pdf_data = cached_pdf_data
             st.session_state.file_name = uploaded_file.name
             st.session_state.file_hash = file_hash
             st.session_state.from_cache = True
@@ -254,6 +264,16 @@ pdf_data = st.session_state.pdf_data
 
 if pdf_data:
     is_standalone_image = pdf_data.get("input_type") == "image"
+    if is_standalone_image and not pdf_data.get("page_images") and uploaded_file is not None:
+        try:
+            uploaded_file.seek(0)
+            re_extracted = extract_document_data(uploaded_file.read(), uploaded_file.name, include_images=True)
+            pdf_data["page_images"] = re_extracted.get("page_images", [])
+            st.session_state.pdf_data = pdf_data
+            if st.session_state.file_hash:
+                save_document(st.session_state.file_hash, uploaded_file.name, file_bytes, pdf_data)
+        except Exception:
+            pass
     if is_standalone_image:
         st.info("Image analysis requires a vision-capable model in LM Studio. Model names alone do not confirm image support.")
     cache_badge = (

@@ -1,4 +1,4 @@
-﻿# DocuMind AI
+# DocuMind AI
 
 DocuMind AI is a local document analysis and summarization application. It uses Streamlit for the interface and an OpenAI-compatible LM Studio server for local language-model inference. It can summarize documents, answer questions about them, inspect extracted content, and export reports.
 

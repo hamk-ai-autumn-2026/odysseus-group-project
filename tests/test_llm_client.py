@@ -35,113 +35,6 @@ from src.llm_client import (
     chat_stream_response,
 )
 
-
-@pytest.mark.parametrize("filename", ["report.pdf", "REPORT.PDF"])
-@pytest.mark.parametrize("chunk_count", [1, 2])
-@pytest.mark.parametrize("enable_map_reduce", [False, True])
-def test_oversized_pdf_always_routes_to_map_reduce(filename, chunk_count, enable_map_reduce):
-    text = "x" * (SINGLE_PASS_MAX_CONTEXT_CHARS + 1)
-    assert should_use_map_reduce(filename, text, chunk_count, enable_map_reduce)
-
-
-@pytest.mark.parametrize("text_length", [SINGLE_PASS_MAX_CONTEXT_CHARS - 1, SINGLE_PASS_MAX_CONTEXT_CHARS])
-@pytest.mark.parametrize("chunk_count", [1, 2])
-@pytest.mark.parametrize("enable_map_reduce", [False, True])
-def test_pdf_within_single_pass_limit_preserves_routing(text_length, chunk_count, enable_map_reduce):
-    assert should_use_map_reduce("report.pdf", "x" * text_length, chunk_count, enable_map_reduce) == (
-        chunk_count > 1 and enable_map_reduce
-    )
-
-
-@pytest.mark.parametrize("filename", ["notes.txt", "notes.md", "notes.markdown", "data.json"])
-@pytest.mark.parametrize("chunk_count", [1, 2])
-@pytest.mark.parametrize("enable_map_reduce", [False, True])
-def test_oversized_text_formats_preserve_routing(filename, chunk_count, enable_map_reduce):
-    text = "x" * (SINGLE_PASS_MAX_CONTEXT_CHARS + 1)
-    assert should_use_map_reduce(filename, text, chunk_count, enable_map_reduce) == (
-        chunk_count > 1 and enable_map_reduce
-    )
-
-
-@pytest.mark.parametrize("page_images", [None, []])
-@patch("src.llm_client.generate_streaming_response")
-def test_single_pass_without_images_uses_text_only_prompt(mock_stream, page_images):
-    mock_stream.return_value = iter([])
-    list(run_single_pass_summary(
-        MagicMock(), "test-model", "Document content", "Executive Summary", page_images=page_images
-    ))
-    assert mock_stream.call_args.args[3] == "Here is the document text:\n\nDocument content\n\n"
-
-
-@pytest.mark.parametrize("page_images", [None, [], [{"page_num": 2, "data_url": "unused"}]])
-@patch("src.llm_client.generate_streaming_response")
-def test_map_without_matching_images_uses_text_only_prompt(mock_stream, page_images):
-    mock_stream.return_value = iter([])
-    client = MagicMock()
-    client.chat.completions.create.return_value.choices[0].message.content = "Map summary"
-    chunks = [{"chunk_id": 1, "page_range": "Page 1", "pages": [1], "text": "Document content"}]
-    list(map_reduce_summary(client, "test-model", chunks, "Executive Summary", page_images=page_images))
-    messages = client.chat.completions.create.call_args.kwargs["messages"]
-    assert messages[1]["content"] == "Document excerpt (Page 1):\n\nDocument content\n\n"
-
-
-@pytest.mark.parametrize(
-    ("preset", "instruction"),
-    [("Executive Summary", "Focus on the chart"), ("Custom Prompt", "Read the labels")],
-)
-def test_standalone_image_summary_multimodal_request(preset, instruction):
-    client = MagicMock()
-    client.chat.completions.create.return_value = [MagicMock(choices=[MagicMock(delta=MagicMock(content="Image report"))])]
-    images = [{"page_num": 1, "data_url": "data:image/webp;base64,aW1hZ2U="}]
-    result = list(run_image_summary(client, "bonsai-27b", images, preset, instruction, "Finnish", 0.2))
-
-    assert result == ["Image report"]
-    request = client.chat.completions.create.call_args.kwargs
-    assert request["model"] == "bonsai-27b"
-    assert request["stream"] is True
-    assert request["temperature"] == 0.2
-    assert instruction in request["messages"][0]["content"]
-    assert "Finnish (Suomi)" in request["messages"][0]["content"]
-    assert "attached image" in request["messages"][0]["content"]
-    content = request["messages"][1]["content"]
-    assert content[0]["type"] == "text"
-    assert "Here is the document text" not in content[0]["text"]
-    assert content[1] == {"type": "image_url", "image_url": {"url": images[0]["data_url"]}}
-
-
-@pytest.mark.parametrize("error", ["Model does not support images", "Missing vision encoder", "Unsupported image_url content"])
-def test_standalone_image_rejection_requires_vision_without_fallback(error):
-    client = MagicMock()
-    client.chat.completions.create.side_effect = RuntimeError(error)
-    images = [{"page_num": 1, "data_url": "data:image/png;base64,aW1hZ2U="}]
-    with pytest.raises(ImageAnalysisError, match="vision-capable model is required") as caught:
-        list(run_image_summary(client, "bonsai-27b", images, "Executive Summary"))
-    assert error in str(caught.value)
-    assert "bonsai-27b" in str(caught.value)
-    client.chat.completions.create.assert_called_once()
-
-
-def test_standalone_image_summary_requires_attachment():
-    client = MagicMock()
-    with pytest.raises(ValueError, match="attached image"):
-        list(run_image_summary(client, "bonsai-27b", [], "Executive Summary"))
-    client.chat.completions.create.assert_not_called()
-
-
-def test_standalone_image_chat_attaches_image_and_history():
-    client = MagicMock()
-    client.chat.completions.create.return_value = [MagicMock(choices=[MagicMock(delta=MagicMock(content="Visible chart"))])]
-    images = [{"page_num": 1, "data_url": "data:image/jpeg;base64,aW1hZ2U="}]
-    history = [{"role": "user", "content": "Describe it"}, {"role": "assistant", "content": "A chart"}]
-    assert list(chat_stream_response(client, "bonsai-27b", "", history, "What are the labels?", page_images=images)) == ["Visible chart"]
-    messages = client.chat.completions.create.call_args.kwargs["messages"]
-    assert messages[1:3] == history
-    assert messages[-1]["content"] == [
-        {"type": "text", "text": "What are the labels?"},
-        {"type": "image_url", "image_url": {"url": images[0]["data_url"]}},
-    ]
-
-
 class FakeStream:
     def __init__(self, contents):
         self.chunks = [
@@ -220,6 +113,121 @@ def test_prompt_presets_completeness():
         assert preset in PROMPT_PRESETS
         assert isinstance(PROMPT_PRESETS[preset], str)
         assert len(PROMPT_PRESETS[preset]) > 10
+
+
+def test_standalone_image_chat_rejection_has_no_text_fallback():
+    client = MagicMock()
+    client.chat.completions.create.side_effect = RuntimeError("Image input unsupported")
+    with pytest.raises(ImageAnalysisError, match="vision-capable model is required"):
+        list(chat_stream_response(client, "bonsai-27b", "", [], "Describe it", page_images=[{"data_url": "image"}]))
+    client.chat.completions.create.assert_called_once()
+
+
+@pytest.mark.parametrize("filename", ["report.pdf", "REPORT.PDF"])
+@pytest.mark.parametrize("chunk_count", [1, 2])
+@pytest.mark.parametrize("enable_map_reduce", [False, True])
+def test_oversized_pdf_always_routes_to_map_reduce(filename, chunk_count, enable_map_reduce):
+    text = "x" * (SINGLE_PASS_MAX_CONTEXT_CHARS + 1)
+    assert should_use_map_reduce(filename, text, chunk_count, enable_map_reduce)
+
+
+@pytest.mark.parametrize("text_length", [SINGLE_PASS_MAX_CONTEXT_CHARS - 1, SINGLE_PASS_MAX_CONTEXT_CHARS])
+@pytest.mark.parametrize("chunk_count", [1, 2])
+@pytest.mark.parametrize("enable_map_reduce", [False, True])
+def test_pdf_within_single_pass_limit_preserves_routing(text_length, chunk_count, enable_map_reduce):
+    assert should_use_map_reduce("report.pdf", "x" * text_length, chunk_count, enable_map_reduce) == (
+        chunk_count > 1 and enable_map_reduce
+    )
+
+
+@pytest.mark.parametrize("filename", ["notes.txt", "notes.md", "notes.markdown", "data.json"])
+@pytest.mark.parametrize("chunk_count", [1, 2])
+@pytest.mark.parametrize("enable_map_reduce", [False, True])
+def test_oversized_text_formats_preserve_routing(filename, chunk_count, enable_map_reduce):
+    text = "x" * (SINGLE_PASS_MAX_CONTEXT_CHARS + 1)
+    assert should_use_map_reduce(filename, text, chunk_count, enable_map_reduce) == (
+        chunk_count > 1 and enable_map_reduce
+    )
+
+
+@pytest.mark.parametrize("page_images", [None, []])
+@patch("src.llm_client.generate_streaming_response")
+def test_single_pass_without_images_uses_text_only_prompt(mock_stream, page_images):
+    mock_stream.return_value = iter([])
+    list(run_single_pass_summary(
+        MagicMock(), "test-model", "Document content", "Executive Summary", page_images=page_images
+    ))
+    assert mock_stream.call_args.args[3] == "Here is the document text:\n\nDocument content\n\n"
+
+
+@pytest.mark.parametrize("page_images", [None, [], [{"page_num": 2, "data_url": "unused"}]])
+@patch("src.llm_client.generate_streaming_response")
+def test_map_without_matching_images_uses_text_only_prompt(mock_stream, page_images):
+    mock_stream.return_value = iter([])
+    client = MagicMock()
+    client.chat.completions.create.return_value = FakeStream(["Map summary"])
+    chunks = [{"chunk_id": 1, "page_range": "Page 1", "pages": [1], "text": "Document content"}]
+    list(map_reduce_summary(client, "test-model", chunks, "Executive Summary", page_images=page_images))
+    messages = client.chat.completions.create.call_args.kwargs["messages"]
+    assert messages[1]["content"] == "Document excerpt (Page 1):\n\nDocument content\n\n"
+
+
+@pytest.mark.parametrize(
+    ("preset", "instruction"),
+    [("Executive Summary", "Focus on the chart"), ("Custom Prompt", "Read the labels")],
+)
+def test_standalone_image_summary_multimodal_request(preset, instruction):
+    client = MagicMock()
+    client.chat.completions.create.return_value = FakeStream(["Image report"])
+    images = [{"page_num": 1, "data_url": "data:image/webp;base64,aW1hZ2U="}]
+    result = list(run_image_summary(client, "bonsai-27b", images, preset, instruction, "Finnish", 0.2))
+
+    assert result == ["Image report"]
+    assert client.chat.completions.create.return_value.closed
+    request = client.chat.completions.create.call_args.kwargs
+    assert request["model"] == "bonsai-27b"
+    assert request["stream"] is True
+    assert request["temperature"] == 0.2
+    assert instruction in request["messages"][0]["content"]
+    assert "Finnish (Suomi)" in request["messages"][0]["content"]
+    assert "attached image" in request["messages"][0]["content"]
+    content = request["messages"][1]["content"]
+    assert content[0]["type"] == "text"
+    assert "Here is the document text" not in content[0]["text"]
+    assert content[1] == {"type": "image_url", "image_url": {"url": images[0]["data_url"]}}
+
+
+@pytest.mark.parametrize("error", ["Model does not support images", "Missing vision encoder", "Unsupported image_url content"])
+def test_standalone_image_rejection_requires_vision_without_fallback(error):
+    client = MagicMock()
+    client.chat.completions.create.side_effect = RuntimeError(error)
+    images = [{"page_num": 1, "data_url": "data:image/png;base64,aW1hZ2U="}]
+    with pytest.raises(ImageAnalysisError, match="vision-capable model is required") as caught:
+        list(run_image_summary(client, "bonsai-27b", images, "Executive Summary"))
+    assert error in str(caught.value)
+    assert "bonsai-27b" in str(caught.value)
+    client.chat.completions.create.assert_called_once()
+
+
+def test_standalone_image_summary_requires_attachment():
+    client = MagicMock()
+    with pytest.raises(ValueError, match="attached image"):
+        list(run_image_summary(client, "bonsai-27b", [], "Executive Summary"))
+    client.chat.completions.create.assert_not_called()
+
+
+def test_standalone_image_chat_attaches_image_and_history():
+    client = MagicMock()
+    client.chat.completions.create.return_value = [MagicMock(choices=[MagicMock(delta=MagicMock(content="Visible chart"))])]
+    images = [{"page_num": 1, "data_url": "data:image/jpeg;base64,aW1hZ2U="}]
+    history = [{"role": "user", "content": "Describe it"}, {"role": "assistant", "content": "A chart"}]
+    assert list(chat_stream_response(client, "bonsai-27b", "", history, "What are the labels?", page_images=images)) == ["Visible chart"]
+    messages = client.chat.completions.create.call_args.kwargs["messages"]
+    assert messages[1:3] == history
+    assert messages[-1]["content"] == [
+        {"type": "text", "text": "What are the labels?"},
+        {"type": "image_url", "image_url": {"url": images[0]["data_url"]}},
+    ]
 
 
 def test_standalone_image_chat_rejection_has_no_text_fallback():
@@ -403,7 +411,7 @@ class TestGenerateStreamingResponse:
         chunk1 = MagicMock(choices=[MagicMock(delta=MagicMock(content="Hello "))])
         chunk2 = MagicMock(choices=[MagicMock(delta=MagicMock(content="world!"))])
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = [chunk1, chunk2]
+        mock_client.chat.completions.create.return_value = FakeStream(["Hello ", "world!"])
 
         tokens = list(
             generate_streaming_response(
@@ -424,7 +432,7 @@ class TestGenerateStreamingResponse:
         chunk1 = MagicMock(choices=[MagicMock(delta=MagicMock(content="Part 1"))])
         chunk2 = MagicMock(choices=[MagicMock(delta=MagicMock(content="Part 2"))])
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = [chunk1, chunk2]
+        mock_client.chat.completions.create.return_value = FakeStream(["Part 1", "Part 2"])
 
         stop_flag = False
 
@@ -676,18 +684,15 @@ class TestMapReduceSummary:
         Tests full 2-stage Map-Reduce summarization workflow execution.
         """
         mock_client = MagicMock()
-        mock_map_resp1 = MagicMock(choices=[MagicMock(message=MagicMock(content="Summary Chunk 1"))])
-        mock_map_resp2 = MagicMock(choices=[MagicMock(message=MagicMock(content="Summary Chunk 2"))])
-
-        mock_client.chat.completions.create.side_effect = [mock_map_resp1, mock_map_resp2]
-
-        reduce_chunk = MagicMock(choices=[MagicMock(delta=MagicMock(content="Final Synthesized Report"))])
+        mock_map_resp1 = FakeStream(["Summary ", "Chunk 1"])
+        mock_map_resp2 = FakeStream(["Summary ", "Chunk 2"])
+        reduce_stream = FakeStream(["Final Synthesized Report"])
         
         # In the reduce phase, generate_streaming_response is called which uses client.chat.completions.create
         mock_client.chat.completions.create.side_effect = [
             mock_map_resp1,
             mock_map_resp2,
-            [reduce_chunk],
+            reduce_stream,
         ]
 
         chunks = [
@@ -712,6 +717,12 @@ class TestMapReduceSummary:
         )
 
         assert result_tokens == ["Final Synthesized Report"]
+        calls = mock_client.chat.completions.create.call_args_list
+        assert all(call.kwargs["stream"] for call in calls)
+        reduce_text = calls[-1].kwargs["messages"][1]["content"]
+        assert "Summary Chunk 1" in reduce_text
+        assert "Summary Chunk 2" in reduce_text
+        assert mock_map_resp1.closed and mock_map_resp2.closed and reduce_stream.closed
         assert len(status_messages) == 3
         assert "Processing chunk 1/2" in status_messages[0]
         assert "Processing chunk 2/2" in status_messages[1]
@@ -752,13 +763,13 @@ class TestMapReduceSummary:
         mock_client = MagicMock()
 
         # Chunk 1 raises exception, Chunk 2 succeeds
-        mock_chunk2_resp = MagicMock(choices=[MagicMock(message=MagicMock(content="Chunk 2 Map Summary"))])
-        reduce_chunk = MagicMock(choices=[MagicMock(delta=MagicMock(content="Final Report with Chunk 2"))])
+        mock_chunk2_resp = FakeStream(["Chunk 2 Map Summary"])
+        reduce_stream = FakeStream(["Final Report with Chunk 2"])
 
         mock_client.chat.completions.create.side_effect = [
             RuntimeError("LM Studio chunk 1 timeout"),
             mock_chunk2_resp,
-            [reduce_chunk],
+            reduce_stream,
         ]
 
         chunks = [
@@ -776,18 +787,21 @@ class TestMapReduceSummary:
         )
 
         assert result_tokens == ["Final Report with Chunk 2"]
+        reduce_text = mock_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        assert "Chunk 2 Map Summary" in reduce_text
+        assert "LM Studio chunk 1 timeout" in reduce_text
 
     def test_map_reduce_summary_page_images_filtering(self) -> None:
         """
         Tests that page images are correctly filtered and assigned only to matching chunk pages.
         """
         mock_client = MagicMock()
-        mock_map_resp = MagicMock(choices=[MagicMock(message=MagicMock(content="Map summary"))])
-        reduce_chunk = MagicMock(choices=[MagicMock(delta=MagicMock(content="Final summary"))])
+        mock_map_resp = FakeStream(["Map summary"])
+        reduce_stream = FakeStream(["Final summary"])
 
         mock_client.chat.completions.create.side_effect = [
             mock_map_resp,
-            [reduce_chunk],
+            reduce_stream,
         ]
 
         chunks = [

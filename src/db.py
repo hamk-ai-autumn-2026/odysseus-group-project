@@ -109,9 +109,13 @@ def save_document(
     init_db(db_path)
     conn = get_connection(db_path)
     try:
-        # Omit large base64 page images from SQLite document cache to avoid database bloat
-        cached_data = {k: v for k, v in pdf_data.items() if k != "page_images"}
-        cached_data["page_images"] = []
+        # Omit large base64 page images from SQLite document cache to avoid database bloat,
+        # but retain page_images for standalone image inputs where the image is the core content.
+        if pdf_data.get("input_type") == "image":
+            cached_data = dict(pdf_data)
+        else:
+            cached_data = {k: v for k, v in pdf_data.items() if k != "page_images"}
+            cached_data["page_images"] = []
         data_json = json.dumps(cached_data, ensure_ascii=False)
         now = datetime.now().isoformat()
         with conn:
@@ -523,4 +527,3 @@ def clear_table_records(table_name: str, db_path: Optional[str] = None) -> None:
             conn.execute(f"DELETE FROM `{table_name}`")
     finally:
         conn.close()
-
