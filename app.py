@@ -14,6 +14,8 @@ from src.llm_client import (
     map_reduce_summary,
     should_use_map_reduce,
     chat_stream_response,
+    list_lm_studio_models,
+    switch_lm_studio_model,
 )
 from src.ui import (
     inject_custom_css,
@@ -68,6 +70,8 @@ if "current_preset" not in st.session_state:
     st.session_state.current_preset = "Executive Summary"
 if "stop_requested" not in st.session_state:
     st.session_state.stop_requested = False
+if "selected_model" not in st.session_state:
+    st.session_state.selected_model = None
 
 
 # Helper function to switch active document from SQLite cache
@@ -133,6 +137,17 @@ with st.sidebar:
 
         # Check server status
         is_connected, status_msg, available_models = check_lm_studio_connection(lm_url, lm_key)
+        if is_connected:
+            try:
+                installed_models = list_lm_studio_models(lm_url, lm_key)
+            except RuntimeError:
+                installed_models = []
+            else:
+                available_models = [
+                    model["key"]
+                    for model in installed_models
+                    if model.get("key")
+                ]
 
         if is_connected:
             st.markdown(
@@ -157,9 +172,23 @@ with st.sidebar:
 
     with st.expander("🤖 Model Selection", expanded=True):
         if available_models:
-            selected_model = st.selectbox("Active Model", options=available_models, index=0)
+            if st.session_state.selected_model not in available_models:
+                st.session_state.selected_model = available_models[0]
+            selected_model = st.selectbox(
+                "Active Model",
+                options=available_models,
+                key="selected_model",
+            )
+            if st.button("🔄 Load selected model", width="stretch"):
+                try:
+                    switch_lm_studio_model(selected_model, lm_url, lm_key)
+                except (RuntimeError, ValueError) as error:
+                    st.error(f"Could not switch LM Studio model: {error}")
+                else:
+                    st.success(f"Model `{selected_model}` loaded.")
+                    st.rerun()
         else:
-            selected_model = st.text_input("Model Name", value="local-model")
+            selected_model = st.text_input("Model Name", value="local-model", key="selected_model")
 
     with st.expander("🎛️ Processing Settings", expanded=False):
         temperature = st.slider("Temperature (Creativity)", min_value=0.0, max_value=1.0, value=0.3, step=0.05)
@@ -219,22 +248,27 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     file_bytes = uploaded_file.read()
     file_hash = calculate_file_hash(file_bytes)
+    needs_visual_refresh = (
+        uploaded_file.name.lower().endswith(".pdf")
+        and st.session_state.file_hash == file_hash
+        and st.session_state.pdf_data is not None
+        and not st.session_state.pdf_data.get("page_images")
+    )
 
     # Check if this file is different from current active document
-    if st.session_state.file_hash != file_hash:
+    if st.session_state.file_hash != file_hash or needs_visual_refresh:
         # First check if document already exists in SQLite cache
         cached_doc = get_document_by_hash(file_hash)
         if cached_doc:
             cached_pdf_data = cached_doc["pdf_data"]
             cached_pages = cached_pdf_data.get("pages", [])
+            is_cached_pdf = uploaded_file.name.lower().endswith(".pdf")
             cache_missing_picture_counts = (
-                uploaded_file.name.lower().endswith(".pdf")
-                and (
-                    "picture_count" not in cached_pdf_data
-                    or any("picture_count" not in page for page in cached_pages)
-                )
+                "picture_count" not in cached_pdf_data
+                or any("picture_count" not in page for page in cached_pages)
             )
-            if cache_missing_picture_counts:
+            if is_cached_pdf and (cache_missing_picture_counts or not cached_pdf_data.get("page_images")):
+                # SQLite omits large PDF page images; restore them for visual analysis.
                 cached_pdf_data = extract_document_data(
                     file_bytes,
                     uploaded_file.name,

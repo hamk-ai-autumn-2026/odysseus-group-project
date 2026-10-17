@@ -110,8 +110,9 @@ def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Di
 
 def _count_page_pictures(page: Any) -> int:
     """Count image instances displayed on a PDF page, including inline images."""
-    image_info = page.get_image_info(xrefs=True)
-    return len(image_info)
+    image_info_count = len(page.get_image_info(xrefs=True))
+    xref_count = len(page.get_images(full=True))
+    return max(image_info_count, xref_count)
 
 
 def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str, Any]:
