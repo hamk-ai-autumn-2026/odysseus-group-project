@@ -15,7 +15,7 @@ and explicitly verifies edge cases often overlooked by standard toolchains, such
 
 import math
 from typing import List, Dict, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 import pytest
 from types import SimpleNamespace
 from src.llm_client import (
@@ -25,6 +25,10 @@ from src.llm_client import (
     LANGUAGE_PROMPTS,
     get_openai_client,
     check_lm_studio_connection,
+    list_lm_studio_models,
+    load_lm_studio_model,
+    unload_lm_studio_model,
+    switch_lm_studio_model,
     generate_streaming_response,
     run_single_pass_summary,
     run_image_summary,
@@ -113,6 +117,15 @@ def test_prompt_presets_completeness():
         assert preset in PROMPT_PRESETS
         assert isinstance(PROMPT_PRESETS[preset], str)
         assert len(PROMPT_PRESETS[preset]) > 10
+
+
+def test_standalone_image_chat_rejection_has_no_text_fallback():
+    client = MagicMock()
+    client.chat.completions.create.side_effect = RuntimeError("Image input unsupported")
+    with pytest.raises(ImageAnalysisError, match="vision-capable model is required"):
+        list(chat_stream_response(client, "bonsai-27b", "", [], "Describe it", page_images=[{"data_url": "image"}]))
+    client.chat.completions.create.assert_called_once()
+
 
 @pytest.mark.parametrize("filename", ["report.pdf", "REPORT.PDF"])
 @pytest.mark.parametrize("chunk_count", [1, 2])
@@ -388,6 +401,60 @@ class TestCheckLMStudioConnection:
         assert is_connected is False
         assert "LM Studio Connection Error: Internal server error 500" in msg
         assert models == []
+
+
+@patch("src.llm_client._lm_studio_rest_request")
+def test_list_lm_studio_models_returns_llm_models(mock_request: MagicMock) -> None:
+    mock_request.return_value = {
+        "models": [
+            {"type": "llm", "key": "alpha", "loaded_instances": []},
+            {"type": "embedding", "key": "embeddings", "loaded_instances": []},
+        ]
+    }
+
+    assert list_lm_studio_models() == [
+        {"type": "llm", "key": "alpha", "loaded_instances": []}
+    ]
+    mock_request.assert_called_once_with("GET", DEFAULT_BASE_URL, DEFAULT_API_KEY, "/models")
+
+
+@patch("src.llm_client._lm_studio_rest_request")
+def test_switch_lm_studio_model_unloads_other_instances_and_loads_target(
+    mock_request: MagicMock,
+) -> None:
+    mock_request.side_effect = [
+        {
+            "models": [
+                {"type": "llm", "key": "old", "loaded_instances": [{"id": "old-instance"}]},
+                {"type": "llm", "key": "new", "loaded_instances": []},
+            ]
+        },
+        {"instance_id": "old-instance"},
+        {"status": "loaded", "instance_id": "new"},
+    ]
+
+    assert switch_lm_studio_model("new") == {
+        "status": "loaded",
+        "instance_id": "new",
+    }
+    assert mock_request.call_args_list[1:] == [
+        call(
+            "POST",
+            DEFAULT_BASE_URL,
+            DEFAULT_API_KEY,
+            "/models/unload",
+            {"instance_id": "old-instance"},
+            timeout=30,
+        ),
+        call(
+            "POST",
+            DEFAULT_BASE_URL,
+            DEFAULT_API_KEY,
+            "/models/load",
+            {"model": "new"},
+            timeout=300,
+        ),
+    ]
 
 
 class TestGenerateStreamingResponse:

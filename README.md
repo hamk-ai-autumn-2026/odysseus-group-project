@@ -11,6 +11,7 @@ Document parsing, LM Studio requests, and neural text-to-speech run 100% locally
 - Analyze PNG, JPEG, and WebP images with a vision-capable model.
 - Extract PDF text, metadata, page images, word counts, character counts, and estimated reading time.
 - Choose presets for executive summaries, key insights, technical breakdowns, actionable takeaways, mathematical analysis, or custom prompts.
+- Browse installed LM Studio models and load a selected model while unloading other loaded LLM instances.
 - Select the output language: same as the document, English, or Finnish.
 - Use map-reduce processing for large documents and stream generated responses.
 - Stop an active analysis request and avoid saving incomplete reports.
@@ -50,7 +51,7 @@ that a vision-capable model is required instead of retrying as text-only analysi
 - `pywebview` for the standalone window
 - `piper-tts` for 100% offline, local neural text-to-speech voiceovers
 
-The default LM Studio endpoint is `http://localhost:1234/v1`. You can change it in the sidebar. A vision-capable model is required for image analysis.
+The default LM Studio endpoint is `http://localhost:1234/v1`. You can change it in the sidebar. Model loading and unloading uses LM Studio's REST API at the matching `/api/v1` endpoint, so use a recent LM Studio release with the REST model-management endpoints enabled. A vision-capable model is required for image analysis.
 
 
 ## Quickstart Guide

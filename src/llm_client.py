@@ -1,6 +1,9 @@
 from typing import List, Dict, Any, Generator, Optional, Tuple, Union
 from pathlib import Path
 from openai import OpenAI
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+import json
 
 DEFAULT_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_API_KEY = "lm-studio"
@@ -74,6 +77,113 @@ def get_openai_client(base_url: str = DEFAULT_BASE_URL, api_key: str = DEFAULT_A
     clean_key = api_key.strip() if api_key else DEFAULT_API_KEY
     return OpenAI(base_url=clean_url, api_key=clean_key)
 
+
+def _get_lm_studio_rest_url(base_url: str) -> str:
+    """Convert an OpenAI-compatible URL to LM Studio's REST API base URL."""
+    clean_url = (base_url or DEFAULT_BASE_URL).strip().rstrip("/")
+    if clean_url.endswith("/v1"):
+        clean_url = clean_url[:-3]
+    return f"{clean_url}/api/v1"
+
+
+def _lm_studio_rest_request(
+    method: str,
+    base_url: str,
+    api_key: str,
+    path: str,
+    payload: Optional[Dict[str, Any]] = None,
+    timeout: float = 5,
+) -> Dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Accept": "application/json", "Authorization": f"Bearer {api_key}"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    request = Request(
+        f"{_get_lm_studio_rest_url(base_url)}{path}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            response_body = response.read()
+    except (HTTPError, URLError, TimeoutError, OSError) as error:
+        raise RuntimeError(f"LM Studio REST request failed: {error}") from error
+    try:
+        return json.loads(response_body.decode("utf-8")) if response_body else {}
+    except json.JSONDecodeError as error:
+        raise RuntimeError("LM Studio returned an invalid REST response.") from error
+
+
+def list_lm_studio_models(
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: str = DEFAULT_API_KEY,
+) -> List[Dict[str, Any]]:
+    """Return installed LM Studio models and their loaded instances."""
+    response = _lm_studio_rest_request("GET", base_url, api_key, "/models")
+    models = response.get("models")
+    if not isinstance(models, list):
+        raise RuntimeError("LM Studio REST response did not contain a model list.")
+    return [model for model in models if model.get("type") == "llm"]
+
+
+def load_lm_studio_model(
+    model: str,
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: str = DEFAULT_API_KEY,
+) -> Dict[str, Any]:
+    """Load an LM Studio model and return its loaded instance details."""
+    return _lm_studio_rest_request(
+        "POST",
+        base_url,
+        api_key,
+        "/models/load",
+        {"model": model},
+        timeout=300,
+    )
+
+
+def unload_lm_studio_model(
+    instance_id: str,
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: str = DEFAULT_API_KEY,
+) -> Dict[str, Any]:
+    """Unload one LM Studio model instance."""
+    return _lm_studio_rest_request(
+        "POST",
+        base_url,
+        api_key,
+        "/models/unload",
+        {"instance_id": instance_id},
+        timeout=30,
+    )
+
+
+def switch_lm_studio_model(
+    model: str,
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: str = DEFAULT_API_KEY,
+) -> Dict[str, Any]:
+    """Unload other LLM instances and load the requested model."""
+    models = list_lm_studio_models(base_url, api_key)
+    target = next((item for item in models if item.get("key") == model), None)
+    if target is None:
+        raise ValueError(f"LM Studio model '{model}' was not found.")
+
+    loaded_instances = target.get("loaded_instances") or []
+    for item in models:
+        if item.get("key") == model:
+            continue
+        for instance in item.get("loaded_instances") or []:
+            instance_id = instance.get("id")
+            if instance_id:
+                unload_lm_studio_model(instance_id, base_url, api_key)
+
+    if loaded_instances:
+        return {"status": "loaded", "instance_id": loaded_instances[0].get("id", model)}
+    return load_lm_studio_model(model, base_url, api_key)
+
+
 def check_lm_studio_connection(base_url: str = DEFAULT_BASE_URL, api_key: str = DEFAULT_API_KEY) -> Tuple[bool, str, List[str]]:
     """
     Tests connection to LM Studio local server and retrieves loaded model IDs.
@@ -124,7 +234,8 @@ def generate_streaming_response(
         
         for chunk in response:
             if check_stop and check_stop():
-                response.close()
+                if hasattr(response, "close"):
+                    response.close()
                 yield "\n\n⏹️ **Analysis stopped by user.**"
                 return
             if chunk.choices and len(chunk.choices) > 0:
@@ -146,7 +257,7 @@ def generate_streaming_response(
         else:
             yield f"\n\n⚠️ **LM Studio Error**: {err_str}"
     finally:
-        if response is not None:
+        if response is not None and hasattr(response, "close"):
             response.close()
 
 LANGUAGE_PROMPTS = {

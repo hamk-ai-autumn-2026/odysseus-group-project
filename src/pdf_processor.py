@@ -14,8 +14,20 @@ from pathlib import Path
 
 SUPPORTED_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 SUPPORTED_DOCUMENT_EXTENSIONS = (
-    "pdf", "md", "markdown", "txt", "json", "csv",
-    "py", "pyi", "cpp", "cxx", "cc", "c", "h", "hpp",
+    "pdf",
+    "md",
+    "markdown",
+    "txt",
+    "json",
+    "csv",
+    "py",
+    "pyi",
+    "cpp",
+    "cxx",
+    "cc",
+    "c",
+    "h",
+    "hpp",
 ) + SUPPORTED_IMAGE_EXTENSIONS
 
 SUPPORTED_CODE_EXTENSIONS = {
@@ -36,6 +48,8 @@ def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
     """Validate an image and retain its bytes for multimodal analysis, without OCR."""
     extension = Path(filename).suffix.lower().lstrip(".")
     expected_format = {"png": "PNG", "jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP"}[extension]
+    normalized_bytes = file_bytes
+    output_format = expected_format
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -45,14 +59,20 @@ def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
                 image.verify()
             with Image.open(io.BytesIO(file_bytes)) as image:
                 image.load()
+                if expected_format == "WEBP":
+                    output = io.BytesIO()
+                    image.convert("RGBA").save(output, format="PNG")
+                    normalized_bytes = output.getvalue()
+                    output_format = "PNG"
     except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
         raise ValueError(f"{filename} is invalid or cannot be safely decoded as an image.") from error
-    mime_type = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}[expected_format]
+    mime_type = {"PNG": "image/png", "JPEG": "image/jpeg"}[output_format]
     return {
         "input_type": "image",
         "pages": [{"page_num": 1, "text": "", "char_count": 0, "word_count": 0, "has_image": True}],
         "full_text": "",
         "total_pages": 1,
+        "picture_count": 1,
         "total_words": 0,
         "total_chars": 0,
         "est_reading_time": 0,
@@ -62,7 +82,7 @@ def extract_image_data(file_bytes: bytes, filename: str) -> Dict[str, Any]:
         },
         "page_images": [{
             "page_num": 1,
-            "data_url": f"data:{mime_type};base64," + base64.b64encode(file_bytes).decode("ascii"),
+            "data_url": f"data:{mime_type};base64," + base64.b64encode(normalized_bytes).decode("ascii"),
         }],
     }
 
@@ -86,6 +106,13 @@ def _render_page_images(file_bytes: bytes, max_dimension: int = 1600) -> List[Di
     finally:
         document.close()
     return images
+
+
+def _count_page_pictures(page: Any) -> int:
+    """Count image instances displayed on a PDF page, including inline images."""
+    image_info_count = len(page.get_image_info(xrefs=True))
+    xref_count = len(page.get_images(full=True))
+    return max(image_info_count, xref_count)
 
 
 def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str, Any]:
@@ -123,12 +150,14 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
                     page_text = ""
 
             clean_text = page_text.strip()
+            picture_count = _count_page_pictures(page)
             pages_data.append({
                 "page_num": i + 1,
                 "text": clean_text,
                 "char_count": len(clean_text),
                 "word_count": len(clean_text.split()),
-                "has_image": False,
+                "has_image": picture_count > 0,
+                "picture_count": picture_count,
             })
             if clean_text:
                 full_text += f"\n--- Page {i + 1} ---\n" + clean_text
@@ -149,20 +178,18 @@ def extract_pdf_data(file_bytes: bytes, include_images: bool = True) -> Dict[str
         # Average reading speed ~ 200 words per min
         est_reading_time = math.ceil(total_words / 200) if total_words > 0 else 0
 
+        total_pictures = sum(page["picture_count"] for page in pages_data)
         page_images = []
         if include_images:
             try:
                 page_images = _render_page_images(file_bytes)
             except Exception:
                 page_images = []
-        images_by_page = {image["page_num"]: image for image in page_images}
-        for page in pages_data:
-            page["has_image"] = page["page_num"] in images_by_page
-
         return {
             "pages": pages_data,
             "full_text": full_text.strip(),
             "total_pages": total_pages,
+            "picture_count": total_pictures,
             "total_words": total_words,
             "total_chars": total_chars,
             "est_reading_time": est_reading_time,
@@ -250,6 +277,7 @@ def extract_document_data(
         "char_count": len(clean_text),
         "word_count": len(clean_text.split()),
         "has_image": False,
+        "picture_count": 0,
     }
     total_words = page["word_count"]
     total_chars = page["char_count"]
@@ -266,6 +294,7 @@ def extract_document_data(
         "pages": [page],
         "full_text": clean_text,
         "total_pages": 1,
+        "picture_count": 0,
         "total_words": total_words,
         "total_chars": total_chars,
         "est_reading_time": math.ceil(total_words / 200) if total_words else 0,

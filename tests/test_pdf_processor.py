@@ -3,6 +3,7 @@ import json
 import base64
 from PIL import Image
 import pytest
+import pymupdf
 from pypdf import PdfWriter, PageObject
 from src.pdf_processor import (
     extract_document_data,
@@ -39,11 +40,56 @@ def test_extract_pdf_data_structure():
     assert "total_pages" in data
     assert "metadata" in data
     assert data["total_pages"] == 2
+    assert data["picture_count"] == 0
     assert data["metadata"]["title"] == "Automated Test Document"
     assert data["metadata"]["author"] == "PyTest Suite"
     assert len(data["page_images"]) == 2
     assert data["page_images"][0]["data_url"].startswith("data:image/jpeg;base64,")
-    assert all(page["has_image"] for page in data["pages"])
+    assert all(not page["has_image"] for page in data["pages"])
+
+
+def test_extract_pdf_data_counts_embedded_pictures():
+    image_buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(image_buffer, format="PNG")
+
+    document = pymupdf.open()
+    page_with_two_pictures = document.new_page()
+    page_with_two_pictures.insert_image(
+        pymupdf.Rect(0, 0, 100, 100), stream=image_buffer.getvalue()
+    )
+    page_with_two_pictures.insert_image(
+        pymupdf.Rect(100, 0, 200, 100), stream=image_buffer.getvalue()
+    )
+    pdf_buffer = io.BytesIO(document.tobytes())
+    document.close()
+
+    data = extract_pdf_data(pdf_buffer.getvalue(), include_images=False)
+
+    assert data["picture_count"] == 2
+    assert data["pages"][0]["picture_count"] == 2
+    assert data["pages"][0]["has_image"] is True
+    assert data["page_images"] == []
+
+
+def test_extract_pdf_data_counts_reused_picture_instances():
+    image_buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "blue").save(image_buffer, format="PNG")
+
+    document = pymupdf.open()
+    page = document.new_page()
+    image_xref = page.insert_image(
+        pymupdf.Rect(0, 0, 100, 100), stream=image_buffer.getvalue()
+    )
+    page.insert_image(
+        pymupdf.Rect(100, 0, 200, 100), xref=image_xref
+    )
+    pdf_bytes = document.tobytes()
+    document.close()
+
+    data = extract_pdf_data(pdf_bytes, include_images=False)
+
+    assert data["picture_count"] == 2
+    assert data["pages"][0]["picture_count"] == 2
 
 
 def test_extract_pdf_data_rejects_corrupt_bytes():
@@ -95,13 +141,22 @@ def test_extract_standalone_image(extension, image_format, mime_type):
     assert data["input_type"] == "image"
     assert data["full_text"] == data["pages"][0]["text"] == ""
     assert data["total_words"] == data["total_chars"] == data["est_reading_time"] == 0
+    assert data["picture_count"] == 1
     assert data["total_pages"] == 1
     assert data["pages"][0]["has_image"] is True
     image = data["page_images"][0]
     assert image["page_num"] == 1
     prefix, payload = image["data_url"].split(",", 1)
-    assert prefix == f"data:{mime_type};base64"
-    assert base64.b64decode(payload) == image_bytes
+    expected_output_mime = "image/png" if image_format == "WEBP" else mime_type
+    assert prefix == f"data:{expected_output_mime};base64"
+    output_bytes = base64.b64decode(payload)
+    if image_format == "WEBP":
+        assert output_bytes != image_bytes
+        with Image.open(io.BytesIO(output_bytes)) as output_image:
+            assert output_image.format == "PNG"
+            assert output_image.size == (8, 8)
+    else:
+        assert output_bytes == image_bytes
     # Its serializable data can use the existing SQLite cache.
     assert json.loads(json.dumps(data)) == data
 

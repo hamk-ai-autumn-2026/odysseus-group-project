@@ -231,3 +231,26 @@ def test_database_inspection_and_queries(temp_db_path):
     clear_table_records("chat_history", temp_db_path)
     assert get_database_stats(temp_db_path)["table_counts"]["chat_history"] == 0
 
+
+def test_standalone_image_preserves_page_images_in_cache(temp_db_path):
+    init_db(temp_db_path)
+    file_bytes = b"fake-webp-image-bytes"
+    file_hash = calculate_file_hash(file_bytes)
+    mock_image_data = {
+        "input_type": "image",
+        "pages": [{"page_num": 1, "text": "", "char_count": 0, "word_count": 0, "has_image": True}],
+        "full_text": "",
+        "total_pages": 1,
+        "total_words": 0,
+        "total_chars": 0,
+        "est_reading_time": 0,
+        "metadata": {"title": "photo.webp"},
+        "page_images": [{"page_num": 1, "data_url": "data:image/png;base64,sample_png_bytes"}],
+    }
+
+    save_document(file_hash, "photo.webp", file_bytes, mock_image_data, temp_db_path)
+    doc_record = get_document_by_hash(file_hash, temp_db_path)
+    assert doc_record is not None
+    assert doc_record["pdf_data"]["input_type"] == "image"
+    assert len(doc_record["pdf_data"]["page_images"]) == 1
+    assert doc_record["pdf_data"]["page_images"][0]["data_url"] == "data:image/png;base64,sample_png_bytes"
